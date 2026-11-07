@@ -25,11 +25,126 @@ import {
   Wrench,
   X,
   Plus,
+  FilePen,
+  FileSearch,
+  FileX,
+  Brain,
+  Loader2,
 } from 'lucide-react';
 import { ClaudeStarburst, NineRouterBadgeIcon, OllamaIcon } from './ClaudeIcons.jsx';
 import MarkdownRenderer from './MarkdownRenderer.jsx';
 import { apiRequest, consumeSSE } from '../lib/api.js';
 import { parseVibeResponse } from '../lib/vibeParser.js';
+
+const ACTION_META = {
+  write_file: { label: 'Write', Icon: FilePlus },
+  edit_file: { label: 'Edit', Icon: FilePen },
+  read_file: { label: 'Read', Icon: FileSearch },
+  delete_file: { label: 'Delete', Icon: FileX },
+  run_command: { label: 'Bash', Icon: Terminal },
+};
+
+function ActionCard({ act, status, onApply, onOpen }) {
+  const meta = ACTION_META[act.type] || { label: act.type, Icon: Wrench };
+  const { Icon } = meta;
+  const subject = act.type === 'run_command' ? act.body.trim().split('\n')[0] : act.path;
+  const state = status?.status;
+  const lines = (act.body || '').split('\n');
+  const hasDetails = act.type === 'write_file' || act.type === 'edit_file' || (act.type === 'run_command' && lines.length > 1);
+
+  return (
+    <details
+      className="group/tool rounded-xl border overflow-hidden"
+      style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}
+    >
+      <summary
+        className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden"
+      >
+        <ChevronRight
+          size={12}
+          className={`shrink-0 transition-transform group-open/tool:rotate-90 ${hasDetails ? '' : 'opacity-0'}`}
+          style={{ color: 'var(--text-muted)' }}
+        />
+        <Icon size={13} className="shrink-0 text-[#D97757]" />
+        <span className="text-[12px] font-semibold shrink-0">{meta.label}</span>
+        <span
+          className="text-[12px] font-mono truncate min-w-0 flex-1"
+          style={{ color: 'var(--text-secondary)' }}
+          title={subject}
+        >
+          {subject}
+        </span>
+        {state === 'done' ? (
+          <span className="text-[11px] text-emerald-600 flex items-center gap-1 shrink-0">
+            <CheckCircle2 size={12} /> {status.detail}
+          </span>
+        ) : state === 'error' ? (
+          <span className="text-[11px] text-red-500 flex items-center gap-1 shrink-0" title={status.detail}>
+            <AlertTriangle size={12} /> Failed
+          </span>
+        ) : state === 'running' ? (
+          <Loader2 size={13} className="animate-spin shrink-0 text-[#D97757]" />
+        ) : (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              onApply();
+            }}
+            className="px-2 py-0.5 rounded-md bg-[#D97757] text-white text-[11px] font-medium cursor-pointer shrink-0"
+          >
+            Apply
+          </button>
+        )}
+      </summary>
+      {hasDetails && (
+        <div className="border-t text-[11.5px] font-mono max-h-56 overflow-auto" style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--bg-canvas)' }}>
+          {act.type === 'edit_file' ? (
+            <>
+              {(act.search || '').split('\n').map((l, i) => (
+                <div key={`s${i}`} className="px-3 whitespace-pre-wrap break-all bg-red-500/10 text-red-600 dark:text-red-400">- {l}</div>
+              ))}
+              {(act.replace || '').split('\n').map((l, i) => (
+                <div key={`r${i}`} className="px-3 whitespace-pre-wrap break-all bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">+ {l}</div>
+              ))}
+            </>
+          ) : (
+            <pre className="px-3 py-2 whitespace-pre-wrap break-all" style={{ color: 'var(--text-secondary)' }}>
+              {lines.slice(0, 60).join('\n')}
+              {lines.length > 60 ? `\n… ${lines.length - 60} more lines` : ''}
+            </pre>
+          )}
+        </div>
+      )}
+      {act.path && act.type !== 'run_command' && act.type !== 'delete_file' && state === 'done' && (
+        <button
+          type="button"
+          onClick={onOpen}
+          className="w-full text-left px-3 py-1.5 border-t text-[11px] hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
+          style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-muted)' }}
+        >
+          Open in editor
+        </button>
+      )}
+    </details>
+  );
+}
+
+function ThinkingBlock({ text, streaming }) {
+  if (!text) return null;
+  return (
+    <details className="group/think text-[12px]" style={{ color: 'var(--text-muted)' }}>
+      <summary className="flex items-center gap-1.5 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
+        <Brain size={13} className={streaming ? 'animate-pulse' : ''} />
+        <span>{streaming ? 'Thinking…' : 'Thought process'}</span>
+        <ChevronRight size={11} className="transition-transform group-open/think:rotate-90" />
+      </summary>
+      <div className="mt-1.5 pl-3 border-l whitespace-pre-wrap leading-relaxed max-h-48 overflow-auto" style={{ borderColor: 'var(--border-strong)' }}>
+        {text}
+      </div>
+    </details>
+  );
+}
 
 function FileTreeItem({ node, depth = 0, activePath, onOpenFile, onDeleteEntry }) {
   const [expanded, setExpanded] = useState(depth < 1);
@@ -579,7 +694,7 @@ export default function VibeCodingStudio({
     <div className="flex-1 h-full min-w-0 flex overflow-hidden">
       {/* 1. LEFT PANE: PC WORKSPACE EXPLORER */}
       <div
-        className="w-60 h-full border-r flex flex-col shrink-0 select-none"
+        className="w-56 h-full border-l order-3 flex flex-col shrink-0 select-none"
         style={{
           backgroundColor: 'var(--bg-surface-2)',
           borderColor: 'var(--border-subtle)',
@@ -742,7 +857,7 @@ export default function VibeCodingStudio({
       </div>
 
       {/* 2. CENTER PANE: MULTI-TAB CODE EDITOR + LIVE PREVIEW + PC TERMINAL */}
-      <div className="flex-1 min-w-0 h-full flex flex-col border-r" style={{ borderColor: 'var(--border-subtle)' }}>
+      <div className="flex-1 min-w-0 h-full flex flex-col order-2">
         {/* Top Editor & Preview Tabs */}
         <div
           className="h-11 px-2 border-b flex items-center justify-between gap-2 overflow-x-auto shrink-0"
@@ -1045,48 +1160,45 @@ export default function VibeCodingStudio({
         )}
       </div>
 
-      {/* 3. RIGHT PANE: AUTONOMOUS CLAUDE VIBE CODING COPILOT */}
+      {/* 1. CHAT PANE (Claude Code style): conversation on the left, workspace on the right */}
       <div
-        className="w-[370px] xl:w-[410px] h-full flex flex-col shrink-0"
-        style={{ backgroundColor: 'var(--bg-canvas)' }}
+        className="order-1 w-[420px] xl:w-[480px] h-full flex flex-col shrink-0 border-r"
+        style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-subtle)' }}
       >
-        <div
-          className="px-4 py-2.5 border-b flex items-center justify-between gap-2 shrink-0"
-          style={{ backgroundColor: 'var(--bg-surface-2)', borderColor: 'var(--border-subtle)' }}
-        >
-          <div className="flex items-center gap-2">
-            <ClaudeStarburst size={19} animated={vibeStreaming} />
-            <div>
-              <div className="text-xs font-semibold">Vibe Coding Agent</div>
-              <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                Reads, writes & runs files on your PC
-              </div>
-            </div>
+        <div className="px-4 h-11 flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <ClaudeStarburst size={17} animated={vibeStreaming} />
+            <span className="text-[13px] font-medium truncate">{workspace.name || 'workspace'}</span>
           </div>
-
-          <label className="flex items-center gap-1.5 text-[11px] font-medium cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={autoApply}
-              onChange={(e) => setAutoApply(e.target.checked)}
-              className="accent-[#D97757] cursor-pointer"
-            />
-            <span>Auto-apply</span>
-          </label>
+          <div className="flex items-center gap-1">
+            {vibeMessages.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setVibeMessages([])}
+                title="Start a new session"
+                className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
+                style={{ color: 'var(--text-muted)' }}
+              >
+                <Plus size={15} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Agent Conversation Feed */}
-        <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-3.5 space-y-4">
+        <div ref={chatScrollRef} className="flex-1 overflow-y-auto px-4 pb-4 space-y-5">
           {vibeMessages.length === 0 ? (
-            <div className="space-y-3 pt-4">
-              <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                Describe an app, feature, script, or bugfix. Claude will directly create and edit files inside{' '}
-                <code className="text-[11px] px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10">
-                  {workspace.name}
-                </code>{' '}
-                and update the Live Preview.
-              </p>
-              <div className="space-y-1.5">
+            <div className="h-full flex flex-col justify-center space-y-5 pb-10">
+              <div className="space-y-2">
+                <ClaudeStarburst size={30} />
+                <h3 className="text-[22px] font-normal leading-tight" style={{ fontFamily: 'var(--font-serif)' }}>
+                  What should we build in <span className="text-[#D97757]">{workspace.name}</span>?
+                </h3>
+                <p className="text-[12.5px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                  Claude reads, edits and runs files directly on your PC and updates the preview as it goes.
+                </p>
+              </div>
+              <div className="space-y-1">
                 {[
                   'Create a complete playable Neon Synthwave Brick Breaker game in index.html, style.css, and game.js.',
                   'Build a clean Python CLI task tracker in task_cli.py and run it to test.',
@@ -1096,8 +1208,8 @@ export default function VibeCodingStudio({
                     key={idx}
                     type="button"
                     onClick={() => sendVibePrompt(starter)}
-                    className="w-full text-left p-2.5 rounded-xl border text-xs hover:border-[#D97757]/60 transition cursor-pointer"
-                    style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}
+                    className="w-full text-left px-3 py-2 rounded-xl text-[12.5px] leading-snug hover:bg-black/5 dark:hover:bg-white/5 transition cursor-pointer"
+                    style={{ color: 'var(--text-secondary)' }}
                   >
                     {starter}
                   </button>
@@ -1110,12 +1222,8 @@ export default function VibeCodingStudio({
                 return (
                   <div
                     key={m.id}
-                    className="text-[11px] px-3 py-1.5 rounded-xl border flex items-center gap-1.5"
-                    style={{
-                      backgroundColor: 'var(--bg-surface-2)',
-                      borderColor: 'var(--border-subtle)',
-                      color: 'var(--text-muted)',
-                    }}
+                    className="text-[11.5px] flex items-center gap-1.5 -my-2"
+                    style={{ color: 'var(--text-muted)' }}
                   >
                     <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
                     <span>{m.hiddenLabel}</span>
@@ -1127,7 +1235,7 @@ export default function VibeCodingStudio({
                 return (
                   <div
                     key={m.id}
-                    className="ml-6 rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed whitespace-pre-wrap"
+                    className="ml-8 rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap"
                     style={{ backgroundColor: 'var(--bg-user-bubble)' }}
                   >
                     {m.content}
@@ -1136,61 +1244,35 @@ export default function VibeCodingStudio({
               }
 
               const { parts } = parseVibeResponse(m.content, vibeStreaming);
+              const isLast = m.id === vibeMessages[vibeMessages.length - 1]?.id;
               return (
-                <div key={m.id} className="space-y-2 text-xs">
+                <div key={m.id} className="space-y-2.5 text-[13px]">
+                  <ThinkingBlock text={m.thinking} streaming={vibeStreaming && isLast && !m.content} />
                   {parts.map((p, i) => {
                     if (p.kind === 'action') {
                       const act = p.action;
-                      const st = actionStatuses[`${m.id}_${act.index}`];
                       return (
-                        <div
+                        <ActionCard
                           key={i}
-                          className="rounded-xl border p-2.5 space-y-1.5"
-                          style={{
-                            backgroundColor: 'var(--bg-surface)',
-                            borderColor: 'var(--border-subtle)',
-                          }}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-mono font-semibold text-[11px] truncate text-[#D97757]">
-                              {act.type}: {act.path || act.body.slice(0, 36)}
-                            </span>
-                            {st?.status === 'done' ? (
-                              <span className="text-[10px] text-emerald-600 font-medium flex items-center gap-1 shrink-0">
-                                <CheckCircle2 size={11} /> {st.detail}
-                              </span>
-                            ) : st?.status === 'error' ? (
-                              <span className="text-[10px] text-red-500 font-medium flex items-center gap-1 shrink-0">
-                                <AlertTriangle size={11} /> Failed
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => applySingleOcAction(m.id, act)}
-                                className="px-2 py-0.5 rounded bg-[#D97757] text-white text-[10px] font-medium cursor-pointer"
-                              >
-                                Apply
-                              </button>
-                            )}
-                          </div>
-                          {act.path && act.type !== 'run_command' && (
-                            <button
-                              type="button"
-                              onClick={() => openFileInTab(act.path)}
-                              className="text-[11px] underline opacity-75 hover:opacity-100 cursor-pointer"
-                            >
-                              Open in editor →
-                            </button>
-                          )}
-                        </div>
+                          act={act}
+                          status={actionStatuses[`${m.id}_${act.index}`]}
+                          onApply={() => applySingleOcAction(m.id, act)}
+                          onOpen={() => openFileInTab(act.path)}
+                        />
                       );
                     }
-                    return (
-                      <div key={i} className="text-xs">
+                    return p.text?.trim() ? (
+                      <div key={i} className="text-[13px] leading-relaxed">
                         <MarkdownRenderer content={p.text} />
                       </div>
-                    );
+                    ) : null;
                   })}
+                  {vibeStreaming && isLast && !m.content && !m.thinking && (
+                    <div className="flex items-center gap-2 text-[12px]" style={{ color: 'var(--text-muted)' }}>
+                      <ClaudeStarburst size={14} animated />
+                      <span>Working…</span>
+                    </div>
+                  )}
                 </div>
               );
             })
@@ -1198,9 +1280,9 @@ export default function VibeCodingStudio({
         </div>
 
         {/* Vibe Agent Input Box */}
-        <div className="p-3 border-t space-y-2 shrink-0" style={{ borderColor: 'var(--border-subtle)' }}>
+        <div className="px-3 pb-3 pt-1 shrink-0">
           <div
-            className="rounded-2xl border p-2.5"
+            className="rounded-2xl border p-3 shadow-sm focus-within:border-[#D97757]/60 transition"
             style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-strong)' }}
           >
             <textarea
@@ -1213,40 +1295,56 @@ export default function VibeCodingStudio({
                   sendVibePrompt();
                 }
               }}
-              placeholder="Ask Claude to create, edit, or run files on your PC..."
-              className="w-full bg-transparent text-xs leading-relaxed resize-none focus:outline-none"
+              placeholder="Reply to Claude…"
+              className="w-full bg-transparent text-[13px] leading-relaxed resize-none focus:outline-none"
             />
-            <div className="flex items-center justify-between pt-1.5">
-              <select
-                value={`${selectedBackend}::${selectedModel}`}
-                onChange={(e) => {
-                  const [b, ...rest] = e.target.value.split('::');
-                  onSelectModel?.(b, rest.join('::'));
-                }}
-                className="text-[11px] px-2 py-1 rounded-lg border max-w-[220px] truncate cursor-pointer"
-                style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-subtle)' }}
-              >
-                <optgroup label="Local Ollama">
-                  {(modelsData?.ollama?.models || []).map((m) => (
-                    <option key={`ol_${m.id}`} value={`ollama::${m.id}`}>
-                      Ollama: {m.name}
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="9Router Gateway">
-                  {(modelsData?.nineRouter?.models || []).slice(0, 60).map((m) => (
-                    <option key={`9r_${m.id}`} value={`9router::${m.id}`}>
-                      9Router: {m.id}
-                    </option>
-                  ))}
-                </optgroup>
-              </select>
+            <div className="flex items-center justify-between gap-2 pt-1.5">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => setAutoApply(!autoApply)}
+                  title={autoApply ? 'Claude applies file edits and commands automatically' : 'You approve each action manually'}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium cursor-pointer shrink-0 transition"
+                  style={{
+                    color: autoApply ? '#D97757' : 'var(--text-secondary)',
+                    backgroundColor: autoApply ? 'var(--accent-claude-soft)' : 'transparent',
+                  }}
+                >
+                  <Sparkles size={12} />
+                  <span>{autoApply ? 'Auto-accept edits' : 'Ask before edits'}</span>
+                </button>
+                <select
+                  value={`${selectedBackend}::${selectedModel}`}
+                  onChange={(e) => {
+                    const [b, ...rest] = e.target.value.split('::');
+                    onSelectModel?.(b, rest.join('::'));
+                  }}
+                  className="text-[11px] px-1.5 py-1 rounded-lg bg-transparent max-w-[160px] truncate cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 focus:outline-none"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  <optgroup label="Local Ollama">
+                    {(modelsData?.ollama?.models || []).map((m) => (
+                      <option key={`ol_${m.id}`} value={`ollama::${m.id}`}>
+                        Ollama: {m.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="9Router Gateway">
+                    {(modelsData?.nineRouter?.models || []).slice(0, 60).map((m) => (
+                      <option key={`9r_${m.id}`} value={`9router::${m.id}`}>
+                        9Router: {m.id}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
 
               {vibeStreaming ? (
                 <button
                   type="button"
                   onClick={() => vibeAbortRef.current?.abort()}
-                  className="w-7 h-7 rounded-xl bg-[#141413] dark:bg-[#F2F0E8] text-white dark:text-[#141413] flex items-center justify-center cursor-pointer"
+                  title="Stop"
+                  className="w-8 h-8 rounded-lg bg-[#141413] dark:bg-[#F2F0E8] text-white dark:text-[#141413] flex items-center justify-center cursor-pointer shrink-0"
                 >
                   <Square size={11} fill="currentColor" />
                 </button>
@@ -1255,24 +1353,14 @@ export default function VibeCodingStudio({
                   type="button"
                   disabled={!vibePrompt.trim()}
                   onClick={() => sendVibePrompt()}
-                  className="w-7 h-7 rounded-xl bg-[#D97757] text-white flex items-center justify-center disabled:opacity-35 cursor-pointer"
+                  title="Send"
+                  className="w-8 h-8 rounded-lg bg-[#D97757] text-white flex items-center justify-center disabled:opacity-35 cursor-pointer shrink-0"
                 >
-                  <ArrowUp size={15} />
+                  <ArrowUp size={16} />
                 </button>
               )}
             </div>
           </div>
-
-          {vibeMessages.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setVibeMessages([])}
-              className="text-[11px] hover:underline cursor-pointer"
-              style={{ color: 'var(--text-muted)' }}
-            >
-              Clear agent session
-            </button>
-          )}
         </div>
       </div>
 
