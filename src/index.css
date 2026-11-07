@@ -1,0 +1,295 @@
+@import "tailwindcss";
+@import "katex/dist/katex.min.css";
+
+:root {
+  /* Authentic Claude.ai Light Mode — Warm Alabaster & Parchment */
+  --bg-canvas: #FAF9F5;
+  --bg-sidebar: #F0EEE6;
+  --bg-sidebar-hover: #E6E3D8;
+  --bg-sidebar-active: #DFDCD0;
+  --bg-surface: #FFFFFF;
+  --bg-surface-2: #F5F3EC;
+  --bg-surface-3: #ECE9DF;
+  --bg-user-bubble: #EFECE4;
+  --bg-code: #1E1E1C;
+  --bg-code-header: #2A2926;
+
+  --border-subtle: #E5E2D9;
+  --border-strong: #D4D0C4;
+  --border-focus: #C8C3B4;
+
+  --text-primary: #141413;
+  --text-secondary: #5C5A53;
+  --text-muted: #87857E;
+  --text-on-accent: #FFFFFF;
+
+  --accent-claude: #D97757;
+  --accent-claude-hover: #C6613F;
+  --accent-claude-soft: rgba(217, 119, 87, 0.12);
+  --accent-blue: #2D6CDF;
+  --accent-blue-soft: rgba(45, 108, 223, 0.1);
+  --accent-green: #278655;
+  --accent-amber: #C67D1E;
+  --accent-danger: #C94038;
+
+  --shadow-composer: 0 4px 24px -2px rgba(20, 20, 19, 0.06), 0 1px 3px rgba(20, 20, 19, 0.04);
+  --shadow-popover: 0 12px 36px -4px rgba(20, 20, 19, 0.14), 0 2px 6px rgba(20, 20, 19, 0.06);
+  --shadow-card: 0 1px 3px rgba(20, 20, 19, 0.04);
+
+  --font-serif: 'Source Serif 4', Georgia, Cambria, 'Times New Roman', serif;
+  --font-sans: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-chat-active: var(--font-serif);
+}
+
+[data-theme="dark"] {
+  /* Authentic Claude.ai Dark Mode — Warm Charcoal & Obsidian */
+  --bg-canvas: #21201E;
+  --bg-sidebar: #171615;
+  --bg-sidebar-hover: #252421;
+  --bg-sidebar-active: #2E2D29;
+  --bg-surface: #2B2A27;
+  --bg-surface-2: #262522;
+  --bg-surface-3: #35332F;
+  --bg-user-bubble: #191816;
+  --bg-code: #151413;
+  --bg-code-header: #1F1E1B;
+
+  --border-subtle: #383632;
+  --border-strong: #4A4741;
+  --border-focus: #635F57;
+
+  --text-primary: #F2F0E8;
+  --text-secondary: #B4B1A6;
+  --text-muted: #7F7C73;
+  --text-on-accent: #FFFFFF;
+
+  --accent-claude: #D97757;
+  --accent-claude-hover: #E38465;
+  --accent-claude-soft: rgba(217, 119, 87, 0.16);
+  --accent-blue: #5E97F6;
+  --accent-blue-soft: rgba(94, 151, 246, 0.14);
+  --accent-green: #44B37A;
+  --accent-amber: #E59F3E;
+  --accent-danger: #E55A51;
+
+  --shadow-composer: 0 6px 28px -2px rgba(0, 0, 0, 0.34), 0 1px 3px rgba(0, 0, 0, 0.22);
+  --shadow-popover: 0 14px 40px -4px rgba(0, 0, 0, 0.52), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.22);
+}
+
+[data-chat-font="serif"] {
+  --font-chat-active: var(--font-serif);
+}
+
+[data-chat-font="sans"] {
+  --font-chat-active: var(--font-sans);
+}
+
+[data-chat-font="dyslexic"] {
+  --font-chat-active: 'Comic Sans MS', 'Verdana', var(--font-sans);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom warm subtle scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(135, 133, 126, 0.25);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(135, 133, 126, 0.45);
+}
+
+/* Claude Prose Styling */
+.claude-prose {
+  font-family: var(--font-chat-active);
+  font-size: 1.04rem;
+  line-height: 1.72;
+  color: var(--text-primary);
+  letter-spacing: -0.004em;
+}
+
+.claude-prose > *:first-child {
+  margin-top: 0;
+}
+.claude-prose > *:last-child {
+  margin-bottom: 0;
+}
+
+.claude-prose p {
+  margin: 0.75em 0;
+}
+
+.claude-prose h1,
+.claude-prose h2,
+.claude-prose h3,
+.claude-prose h4 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.32;
+  margin-top: 1.35em;
+  margin-bottom: 0.5em;
+  letter-spacing: -0.015em;
+}
+
+.claude-prose h1 { font-size: 1.5rem; }
+.claude-prose h2 { font-size: 1.26rem; }
+.claude-prose h3 { font-size: 1.1rem; }
+
+.claude-prose ul,
+.claude-prose ol {
+  margin: 0.65em 0;
+  padding-left: 1.55em;
+}
+
+.claude-prose ul {
+  list-style-type: disc;
+}
+.claude-prose ol {
+  list-style-type: decimal;
+}
+
+.claude-prose li {
+  margin: 0.3em 0;
+}
+
+.claude-prose blockquote {
+  border-left: 3px solid var(--accent-claude);
+  padding-left: 1rem;
+  margin: 1em 0;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.claude-prose a {
+  color: var(--accent-claude);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.claude-prose hr {
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  margin: 1.5em 0;
+}
+
+.claude-prose :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--bg-surface-3);
+  color: var(--text-primary);
+  padding: 0.16em 0.42em;
+  border-radius: 5px;
+  border: 1px solid var(--border-subtle);
+}
+
+.claude-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+}
+
+.claude-prose th,
+.claude-prose td {
+  border: 1px solid var(--border-subtle);
+  padding: 0.55rem 0.8rem;
+  text-align: left;
+}
+
+.claude-prose th {
+  background: var(--bg-surface-2);
+  font-weight: 600;
+}
+
+/* Highlight.js dark code palette (Claude style) */
+.hljs {
+  color: #E6E4DC;
+  background: transparent;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in,
+.hljs-name,
+.hljs-tag {
+  color: #F08D6E;
+}
+.hljs-string,
+.hljs-title,
+.hljs-section,
+.hljs-attribute,
+.hljs-literal,
+.hljs-template-tag,
+.hljs-template-variable,
+.hljs-type,
+.hljs-addition {
+  color: #A6D189;
+}
+.hljs-comment,
+.hljs-quote,
+.hljs-deletion,
+.hljs-meta {
+  color: #7D7A70;
+  font-style: italic;
+}
+.hljs-number,
+.hljs-regexp,
+.hljs-symbol,
+.hljs-variable {
+  color: #E5C890;
+}
+.hljs-function .hljs-title,
+.hljs-title.function_ {
+  color: #8CAAEE;
+}
+
+/* Starburst gentle animation while Claude thinks / streams */
+@keyframes claudeSpinPulse {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.08); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+.claude-starburst-thinking {
+  animation: claudeSpinPulse 3.2s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+@keyframes fadeInSlide {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-claude-in {
+  animation: fadeInSlide 0.22s ease-out forwards;
+}

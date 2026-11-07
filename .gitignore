@@ -1,0 +1,13 @@
+# Dependencies & build output
+node_modules/
+dist/
+
+# Local user data, chat history, projects, and API keys (never commit)
+data/
+
+# Environment & OS files
+.env
+.env.*
+*.log
+.DS_Store
+Thumbs.db
