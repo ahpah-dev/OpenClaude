@@ -20,10 +20,13 @@ import {
   Wrench,
   ZoomIn,
   ZoomOut,
+  Save,
+  Terminal,
 } from 'lucide-react';
 import { ArtifactCubeIcon } from './ClaudeIcons.jsx';
 import MarkdownRenderer from './MarkdownRenderer.jsx';
 import { getArtifactTypeLabel, getFileExtensionForArtifact } from '../lib/artifactParser.js';
+import { apiRequest } from '../lib/api.js';
 
 mermaid.initialize({
   startOnLoad: false,
@@ -176,6 +179,7 @@ export default function ArtifactPanel({
   onClose,
   onSelectVersion,
   onFixWithClaude,
+  onOpenVibeStudio,
 }) {
   const canLiveRender = useMemo(() => {
     const t = artifact?.type || '';
@@ -199,6 +203,7 @@ export default function ArtifactPanel({
   const [mermaidSvg, setMermaidSvg] = useState('');
   const [mermaidErr, setMermaidErr] = useState('');
   const [zoom, setZoom] = useState(1);
+  const [savedToPc, setSavedToPc] = useState(false);
   const iframeRef = useRef(null);
 
   useEffect(() => {
@@ -291,6 +296,21 @@ export default function ArtifactPanel({
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleSaveToPcWorkspace = async () => {
+    try {
+      const ext = getFileExtensionForArtifact(artifact);
+      const filename = `${artifact.identifier || 'artifact'}.${ext}`;
+      await apiRequest('/api/workspace/file', {
+        method: 'POST',
+        body: { path: filename, content: editedContent },
+      });
+      setSavedToPc(true);
+      setTimeout(() => setSavedToPc(false), 3000);
+    } catch (err) {
+      console.error('Failed to save artifact to PC workspace:', err);
+    }
   };
 
   const handleOpenInNewTab = () => {
@@ -630,6 +650,31 @@ export default function ArtifactPanel({
             >
               <ExternalLink size={13} />
               <span className="hidden sm:inline">Open Tab</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleSaveToPcWorkspace}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border hover:opacity-90 transition cursor-pointer"
+            style={{
+              backgroundColor: savedToPc ? 'var(--accent-claude-soft)' : 'var(--bg-surface)',
+              borderColor: savedToPc ? 'var(--accent-claude)' : 'var(--border-subtle)',
+              color: savedToPc ? 'var(--accent-claude)' : 'var(--text-primary)',
+            }}
+            title="Write this file directly into your local PC Vibe Studio workspace"
+          >
+            {savedToPc ? <Check size={13} /> : <Save size={13} />}
+            <span>{savedToPc ? 'Saved to PC' : 'Save to PC'}</span>
+          </button>
+          {savedToPc && onOpenVibeStudio && (
+            <button
+              type="button"
+              onClick={onOpenVibeStudio}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#D97757] text-white font-medium hover:opacity-90 transition cursor-pointer"
+              title="Open in Vibe Studio"
+            >
+              <Terminal size={12} />
+              <span>Open Studio</span>
             </button>
           )}
           <button

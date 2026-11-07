@@ -151,6 +151,10 @@ const DEFAULT_DB = {
       repeatPenalty: 1.05,
     },
     onboardingCompleted: false,
+    vibeWorkspace: {
+      rootPath: '',
+      autoExecute: true,
+    },
   },
   projects: [],
   conversations: [],

@@ -2,8 +2,9 @@
 node_modules/
 dist/
 
-# Local user data, chat history, projects, and API keys (never commit)
+# Local user data, chat history, projects, workspace files, and API keys (never commit)
 data/
+workspace/
 
 # Environment & OS files
 .env

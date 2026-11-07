@@ -11,6 +11,8 @@
   "scripts": {
     "dev": "node server/index.js --dev",
     "build": "vite build",
+    "build:desktop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-desktop.ps1",
+    "desktop": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Start-Process .\\OpenClaude.exe\"",
     "start": "node server/index.js",
     "setup": "node server/cli-setup.js"
   },

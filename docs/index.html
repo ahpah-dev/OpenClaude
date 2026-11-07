@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OpenClaude — Claude's Interface. Your Models. Your Machine.</title>
+  <meta name="description" content="Run the full Claude.ai interface—Artifacts, Projects, Extended Thinking, custom system prompts, and a local PC Vibe Coding Studio—powered by 9Router and local Ollama." />
+  <meta property="og:title" content="OpenClaude — Local Claude.ai Workspace & Vibe Coding Toolkit" />
+  <meta property="og:description" content="Claude's interface on your hardware. Powered by 9Router (:20128) and Local Ollama (:11434), with native Windows desktop app and direct PC file editing." />
+  <meta property="og:type" content="website" />
+  <link rel="icon" type="image/png" href="./favicon.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --bg-alabaster: #FAF9F5;
+      --bg-stone: #F0EEE6;
+      --bg-card: #FFFFFF;
+      --bg-obsidian: #141413;
+      --bg-obsidian-2: #1E1E1C;
+      --ink-primary: #141413;
+      --ink-secondary: #575651;
+      --ink-muted: #85837C;
+      --border-hairline: #E3E0D6;
+      --border-strong: #CECAC0;
+      --terracotta: #D97757;
+      --terracotta-hover: #C36445;
+      --terracotta-soft: rgba(217, 119, 87, 0.12);
+      --sage: #2A7B56;
+      --font-serif: 'Source Serif 4', Georgia, serif;
+      --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      background-color: var(--bg-alabaster);
+      color: var(--ink-primary);
+      font-family: var(--font-sans);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Top Navigation */
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: rgba(250, 249, 245, 0.88);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-hairline);
+    }
+
+    .nav-inner {
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-title {
+      font-family: var(--font-serif);
+      font-size: 21px;
+      font-weight: 500;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-tag {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      border: 1px solid var(--border-strong);
+      color: var(--ink-secondary);
+      font-weight: 500;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 26px;
+      font-size: 13.5px;
+      font-weight: 500;
+      color: var(--ink-secondary);
+    }
+
+    .nav-links a:hover {
+      color: var(--ink-primary);
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-family: var(--font-sans);
+      font-size: 13.5px;
+      font-weight: 600;
+      padding: 9px 16px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.16s ease;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: var(--ink-primary);
+      color: var(--bg-alabaster);
+    }
+
+    .btn-primary:hover {
+      background: #2C2B29;
+    }
+
+    .btn-terracotta {
+      background: var(--terracotta);
+      color: #FFFFFF;
+    }
+
+    .btn-terracotta:hover {
+      background: var(--terracotta-hover);
+    }
+
+    .btn-outline {
+      background: var(--bg-card);
+      border-color: var(--border-strong);
+      color: var(--ink-primary);
+    }
+
+    .btn-outline:hover {
+      background: var(--bg-stone);
+    }
+
+    /* Hero Section */
+    .hero {
+      padding: 76px 0 64px;
+      text-align: center;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--ink-secondary);
+      background: var(--bg-stone);
+      border: 1px solid var(--border-hairline);
+      padding: 5px 13px;
+      border-radius: 999px;
+      margin-bottom: 24px;
+    }
+
+    .eyebrow-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--terracotta);
+    }
+
+    .hero h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(38px, 5.6vw, 66px);
+      font-weight: 400;
+      line-height: 1.06;
+      letter-spacing: -0.03em;
+      max-width: 860px;
+      margin: 0 auto 22px;
+      color: var(--ink-primary);
+    }
+
+    .hero p.lead {
+      font-size: clamp(16px, 1.9vw, 19px);
+      color: var(--ink-secondary);
+      max-width: 690px;
+      margin: 0 auto 32px;
+      line-height: 1.55;
+      font-weight: 400;
+    }
+
+    .hero-cta-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+
+    .btn-lg {
+      padding: 12px 22px;
+      font-size: 14.5px;
+      border-radius: 12px;
+    }
+
+    .quick-clone {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--bg-stone);
+      border: 1px solid var(--border-hairline);
+      padding: 8px 10px 8px 16px;
+      border-radius: 12px;
+      max-width: 100%;
+    }
+
+    .quick-clone code {
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      color: var(--ink-primary);
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .copy-chip {
+      background: var(--bg-card);
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      padding: 5px 10px;
+      font-family: var(--font-sans);
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--ink-primary);
+      cursor: pointer;
+      transition: background 0.15s;
+      flex-shrink: 0;
+    }
+
+    .copy-chip:hover {
+      background: var(--bg-alabaster);
+    }
+
+    /* Interactive Product Preview Frame */
+    .showcase-wrap {
+      margin-top: 48px;
+    }
+
+    .showcase-tabs {
+      display: inline-flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 6px;
+      padding: 5px;
+      background: var(--bg-stone);
+      border: 1px solid var(--border-hairline);
+      border-radius: 14px;
+      margin-bottom: 20px;
+    }
+
+    .showcase-tab {
+      border: none;
+      background: transparent;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink-secondary);
+      padding: 8px 16px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .showcase-tab.active {
+      background: var(--bg-card);
+      color: var(--ink-primary);
+      box-shadow: 0 1px 3px rgba(20, 20, 19, 0.07);
+    }
+
+    .app-window {
+      text-align: left;
+      background: var(--bg-card);
+      border: 1px solid var(--border-strong);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 24px 60px -20px rgba(20, 20, 19, 0.12), 0 2px 8px rgba(20, 20, 19, 0.04);
+    }
+
+    .window-bar {
+      height: 42px;
+      background: var(--bg-stone);
+      border-bottom: 1px solid var(--border-hairline);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--ink-secondary);
+    }
+
+    .window-dots {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+    }
+
+    .window-dots span {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--border-strong);
+    }
+
+    .window-dots span:first-child {
+      background: var(--terracotta);
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      padding: 2px 9px;
+      border-radius: 999px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-hairline);
+    }
+
+    .dot-live {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--sage);
+    }
+
+    .panel-view {
+      display: none;
+      min-height: 430px;
+    }
+
+    .panel-view.active {
+      display: grid;
+    }
+
+    /* Panel 1: Vibe Coding Studio */
+    .vibe-grid {
+      grid-template-columns: 210px 1fr 310px;
+    }
+
+    .vibe-tree {
+      background: #F6F4EC;
+      border-right: 1px solid var(--border-hairline);
+      padding: 14px;
+      font-size: 12.5px;
+    }
+
+    .pane-label {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--ink-muted);
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .tree-item {
+      padding: 5px 8px;
+      border-radius: 7px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--ink-secondary);
+      margin-bottom: 2px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tree-item.selected {
+      background: var(--terracotta-soft);
+      color: var(--terracotta);
+      font-weight: 500;
+    }
+
+    .vibe-center {
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-obsidian);
+      color: #ECE9DF;
+      border-right: 1px solid var(--border-hairline);
+    }
+
+    .editor-tabs {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      background: var(--bg-obsidian-2);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+    }
+
+    .code-body {
+      padding: 16px 18px;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      line-height: 1.65;
+      flex: 1;
+      overflow-x: auto;
+    }
+
+    .tok-kw { color: #E28B6B; }
+    .tok-fn { color: #E8C782; }
+    .tok-str { color: #9DC49A; }
+    .tok-cm { color: #7C7970; }
+
+    .term-drawer {
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      background: #10100F;
+      padding: 12px 16px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      line-height: 1.55;
+      color: #C9C6BC;
+    }
+
+    .term-ok { color: #67C587; }
+
+    .vibe-agent {
+      background: var(--bg-alabaster);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .agent-bubble {
+      background: var(--bg-card);
+      border: 1px solid var(--border-hairline);
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 12.5px;
+      line-height: 1.5;
+    }
+
+    .action-pill {
+      margin-top: 9px;
+      padding: 7px 10px;
+      border-radius: 8px;
+      background: var(--bg-stone);
+      border: 1px solid var(--border-hairline);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Panel 2: Claude Chat + Artifacts */
+    .artifacts-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .chat-pane {
+      padding: 24px 28px;
+      background: var(--bg-alabaster);
+      border-right: 1px solid var(--border-hairline);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .user-msg {
+      align-self: flex-end;
+      background: var(--bg-stone);
+      padding: 10px 15px;
+      border-radius: 16px;
+      font-size: 13.5px;
+      max-width: 85%;
+    }
+
+    .think-box {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--ink-muted);
+      border-left: 2px solid var(--border-strong);
+      padding-left: 10px;
+    }
+
+    .claude-prose {
+      font-family: var(--font-serif);
+      font-size: 15.5px;
+      line-height: 1.62;
+      color: var(--ink-primary);
+    }
+
+    .artifact-preview-pane {
+      background: var(--bg-card);
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .metric-cards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 16px 0;
+    }
+
+    .metric-card {
+      background: var(--bg-alabaster);
+      border: 1px solid var(--border-hairline);
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .metric-card .val {
+      font-family: var(--font-serif);
+      font-size: 22px;
+      font-weight: 500;
+      margin-top: 2px;
+    }
+
+    .bars-demo {
+      height: 130px;
+      background: var(--bg-alabaster);
+      border: 1px solid var(--border-hairline);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      align-items: flex-end;
+      gap: 12px;
+    }
+
+    .bars-demo div {
+      flex: 1;
+      background: var(--terracotta);
+      border-radius: 6px 6px 2px 2px;
+      opacity: 0.88;
+    }
+
+    /* Panel 3: 9Router + Ollama */
+    .router-grid {
+      grid-template-columns: 1fr 1fr;
+      background: var(--bg-alabaster);
+    }
+
+    .router-col {
+      padding: 26px 28px;
+    }
+
+    .router-col:first-child {
+      border-right: 1px solid var(--border-hairline);
+    }
+
+    .route-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 11px 14px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-hairline);
+      border-radius: 10px;
+      margin-top: 9px;
+      font-size: 13px;
+    }
+
+    .route-row code {
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    /* Editorial Sections */
+    .section {
+      padding: 84px 0;
+      border-top: 1px solid var(--border-hairline);
+    }
+
+    .section-header {
+      max-width: 680px;
+      margin-bottom: 44px;
+    }
+
+    .section-kicker {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--terracotta);
+      margin-bottom: 10px;
+    }
+
+    .section-header h2 {
+      font-family: var(--font-serif);
+      font-size: clamp(28px, 3.6vw, 42px);
+      font-weight: 400;
+      line-height: 1.15;
+      letter-spacing: -0.025em;
+      margin-bottom: 12px;
+    }
+
+    .section-header p {
+      color: var(--ink-secondary);
+      font-size: 16px;
+    }
+
+    /* 2x2 Hairline Editorial Matrix */
+    .pillars-matrix {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      border: 1px solid var(--border-hairline);
+      border-radius: 18px;
+      overflow: hidden;
+      background: var(--bg-card);
+    }
+
+    .pillar-cell {
+      padding: 34px 36px;
+      border-bottom: 1px solid var(--border-hairline);
+      border-right: 1px solid var(--border-hairline);
+    }
+
+    .pillar-cell:nth-child(2n) {
+      border-right: none;
+    }
+
+    .pillar-cell:nth-last-child(-n+2) {
+      border-bottom: none;
+    }
+
+    .pillar-num {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--terracotta);
+      margin-bottom: 12px;
+    }
+
+    .pillar-cell h3 {
+      font-family: var(--font-serif);
+      font-size: 23px;
+      font-weight: 500;
+      letter-spacing: -0.015em;
+      margin-bottom: 10px;
+    }
+
+    .pillar-cell p {
+      font-size: 14.5px;
+      color: var(--ink-secondary);
+      margin-bottom: 16px;
+    }
+
+    .spec-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .spec-tags span {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 3px 9px;
+      border-radius: 6px;
+      background: var(--bg-stone);
+      color: var(--ink-secondary);
+    }
+
+    /* Architecture & Specs Table */
+    .spec-table-wrap {
+      background: var(--bg-card);
+      border: 1px solid var(--border-hairline);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    table.spec-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    table.spec-table th,
+    table.spec-table td {
+      padding: 15px 22px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-hairline);
+    }
+
+    table.spec-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    table.spec-table th {
+      width: 240px;
+      font-weight: 600;
+      color: var(--ink-primary);
+      background: #F7F5EE;
+    }
+
+    table.spec-table td {
+      color: var(--ink-secondary);
+    }
+
+    table.spec-table code {
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      color: var(--ink-primary);
+      background: var(--bg-stone);
+      padding: 2px 6px;
+      border-radius: 5px;
+    }
+
+    /* Obsidian Install Card */
+    .install-band {
+      background: var(--bg-obsidian);
+      color: var(--bg-alabaster);
+      border-radius: 22px;
+      padding: 48px;
+      display: grid;
+      grid-template-columns: 1fr 1.15fr;
+      gap: 40px;
+      align-items: center;
+    }
+
+    .install-band h2 {
+      font-family: var(--font-serif);
+      font-size: clamp(28px, 3.4vw, 40px);
+      font-weight: 400;
+      line-height: 1.14;
+      margin-bottom: 14px;
+    }
+
+    .install-band p {
+      color: #B4B1A6;
+      font-size: 15px;
+      margin-bottom: 24px;
+    }
+
+    .code-card {
+      background: var(--bg-obsidian-2);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      padding: 18px 20px;
+      margin-bottom: 14px;
+    }
+
+    .code-card:last-child {
+      margin-bottom: 0;
+    }
+
+    .code-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: #9E9B90;
+      margin-bottom: 10px;
+    }
+
+    .code-card pre {
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      line-height: 1.65;
+      color: #F4F2EA;
+      overflow-x: auto;
+    }
+
+    .copy-dark {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      color: #FAF9F5;
+      border-radius: 7px;
+      padding: 4px 10px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .copy-dark:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border-hairline);
+      padding: 40px 0 52px;
+      font-size: 13px;
+      color: var(--ink-muted);
+    }
+
+    .footer-inner {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 24px;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 22px;
+      font-weight: 500;
+      color: var(--ink-secondary);
+    }
+
+    .footer-links a:hover {
+      color: var(--ink-primary);
+    }
+
+    @media (max-width: 920px) {
+      .vibe-grid,
+      .artifacts-grid,
+      .router-grid,
+      .pillars-matrix,
+      .install-band {
+        grid-template-columns: 1fr;
+      }
+      .pillar-cell {
+        border-right: none !important;
+        border-bottom: 1px solid var(--border-hairline) !important;
+      }
+      .pillar-cell:last-child {
+        border-bottom: none !important;
+      }
+      .vibe-tree,
+      .vibe-center,
+      .chat-pane,
+      .router-col:first-child {
+        border-right: none;
+        border-bottom: 1px solid var(--border-hairline);
+      }
+      .nav-links {
+        display: none;
+      }
+      .install-band {
+        padding: 30px 24px;
+      }
+      table.spec-table th {
+        width: 140px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Sticky Anthropic Header -->
+  <header class="site-header">
+    <div class="container nav-inner">
+      <a href="#" class="brand">
+        <svg width="24" height="24" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <g stroke="#D97757" stroke-width="2.2" stroke-linecap="round">
+            <line x1="14" y1="2.5" x2="14" y2="25.5" />
+            <line x1="2.5" y1="14" x2="25.5" y2="14" />
+            <line x1="5.8" y1="5.8" x2="22.2" y2="22.2" />
+            <line x1="22.2" y1="5.8" x2="5.8" y2="22.2" />
+            <line x1="8.2" y1="4.1" x2="19.8" y2="23.9" />
+            <line x1="19.8" y1="4.1" x2="8.2" y2="23.9" />
+          </g>
+          <circle cx="14" cy="14" r="3" fill="#D97757" />
+        </svg>
+        <span class="brand-title">OpenClaude</span>
+        <span class="brand-tag">UNLICENSE</span>
+      </a>
+
+      <nav class="nav-links">
+        <a href="#capabilities">Capabilities</a>
+        <a href="#vibe-studio">Vibe Toolkit</a>
+        <a href="#specifications">Specifications</a>
+        <a href="#install">Install</a>
+      </nav>
+
+      <div class="nav-actions">
+        <a href="https://github.com/ahpah-dev/OpenClaude" target="_blank" rel="noopener" class="btn btn-outline">
+          GitHub
+        </a>
+        <a href="#install" class="btn btn-primary">
+          Download Desktop
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <main>
+    <section class="hero">
+      <div class="container">
+        <div class="eyebrow">
+          <span class="eyebrow-dot"></span>
+          <span>9Router + Local Ollama + Native Windows Desktop</span>
+        </div>
+
+        <h1>Claude’s interface.<br />Your models. Your machine.</h1>
+
+        <p class="lead">
+          Run the complete Claude.ai workspace—split-pane Artifacts, Projects, Extended Thinking, custom system prompts, and a local PC Vibe Coding Studio—backed by zero-cost Ollama models or 96+ cloud routes via 9Router.
+        </p>
+
+        <div class="hero-cta-row">
+          <a href="#install" class="btn btn-terracotta btn-lg">
+            Get OpenClaude for Windows (.exe)
+          </a>
+          <a href="https://github.com/ahpah-dev/OpenClaude" target="_blank" rel="noopener" class="btn btn-outline btn-lg">
+            View Source on GitHub →
+          </a>
+        </div>
+
+        <div class="quick-clone">
+          <code id="hero-cmd">git clone https://github.com/ahpah-dev/OpenClaude.git &amp;&amp; cd OpenClaude &amp;&amp; .\OpenClaude.exe</code>
+          <button type="button" class="copy-chip" onclick="copyText('git clone https://github.com/ahpah-dev/OpenClaude.git && cd OpenClaude && .\\OpenClaude.exe', this)">
+            Copy
+          </button>
+        </div>
+
+        <!-- Interactive Workspace Switcher -->
+        <div class="showcase-wrap" id="vibe-studio">
+          <div class="showcase-tabs" role="tablist">
+            <button type="button" class="showcase-tab active" onclick="switchPanel('vibe', this)">
+              Vibe Coding Studio (PC)
+            </button>
+            <button type="button" class="showcase-tab" onclick="switchPanel('artifacts', this)">
+              Claude Chat &amp; Live Artifacts
+            </button>
+            <button type="button" class="showcase-tab" onclick="switchPanel('router', this)">
+              9Router + Ollama Engine
+            </button>
+          </div>
+
+          <div class="app-window">
+            <div class="window-bar">
+              <div class="window-dots">
+                <span></span><span></span><span></span>
+                <strong style="margin-left:8px;color:var(--ink-primary);">OpenClaude.exe</strong>
+                <span>— 127.0.0.1:3099</span>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <span class="status-pill"><span class="dot-live"></span> 9Router :20128</span>
+                <span class="status-pill"><span class="dot-live"></span> Ollama :11434</span>
+              </div>
+            </div>
+
+            <!-- Tab 1: Vibe Coding Studio -->
+            <div id="panel-vibe" class="panel-view vibe-grid active">
+              <div class="vibe-tree">
+                <div class="pane-label">
+                  <span>PC WORKSPACE</span>
+                  <span>C:\Projects\app</span>
+                </div>
+                <div class="tree-item">▾ src/</div>
+                <div class="tree-item selected" style="padding-left:20px;">server.ts</div>
+                <div class="tree-item" style="padding-left:20px;">router.ts</div>
+                <div class="tree-item" style="padding-left:20px;">schema.sql</div>
+                <div class="tree-item">index.html</div>
+                <div class="tree-item">package.json</div>
+                <div style="margin-top:22px;padding-top:12px;border-top:1px solid var(--border-hairline);font-size:11.5px;color:var(--ink-muted);">
+                  Direct read/write on disk with 60-step Undo stack &amp; native folder picker.
+                </div>
+              </div>
+
+              <div class="vibe-center">
+                <div class="editor-tabs">
+                  <span>src/server.ts • Saved to PC</span>
+                  <span style="color:#E28B6B;">▶ Run File (Ctrl+Enter)</span>
+                </div>
+                <div class="code-body">
+<pre><span class="tok-kw">import</span> express <span class="tok-kw">from</span> <span class="tok-str">'express'</span>;
+<span class="tok-kw">import</span> { queryMetrics } <span class="tok-kw">from</span> <span class="tok-str">'./router.js'</span>;
+
+<span class="tok-kw">const</span> app = <span class="tok-fn">express</span>();
+
+app.<span class="tok-fn">get</span>(<span class="tok-str">'/api/health'</span>, <span class="tok-kw">async</span> (_req, res) =&gt; {
+  <span class="tok-kw">const</span> stats = <span class="tok-kw">await</span> <span class="tok-fn">queryMetrics</span>();
+  res.<span class="tok-fn">json</span>({ ok: <span class="tok-kw">true</span>, latencyMs: stats.p95 });
+});
+
+app.<span class="tok-fn">listen</span>(4020, () =&gt; console.<span class="tok-fn">log</span>(<span class="tok-str">'Listening on :4020'</span>));</pre>
+                </div>
+                <div class="term-drawer">
+                  <div>PS C:\Projects\app&gt; npm test</div>
+                  <div class="term-ok">✓ src/server.test.ts (6 assertions passed in 142ms)</div>
+                  <div class="term-ok">✓ Process exited with code 0</div>
+                </div>
+              </div>
+
+              <div class="vibe-agent">
+                <div>
+                  <div class="pane-label">
+                    <span>VIBE AGENT</span>
+                    <span style="color:var(--sage);">AUTO-APPLY ON</span>
+                  </div>
+                  <div class="agent-bubble">
+                    Added <code>/api/health</code> with p95 latency reporting and verified the test suite on your machine.
+                    <div class="action-pill">
+                      <span>edit_file · src/server.ts</span>
+                      <span style="color:var(--sage);">✓ Applied</span>
+                    </div>
+                    <div class="action-pill">
+                      <span>run_command · npm test</span>
+                      <span style="color:var(--sage);">Exit 0</span>
+                    </div>
+                  </div>
+                </div>
+                <div style="font-family:var(--font-mono);font-size:11px;color:var(--ink-muted);display:flex;justify-content:space-between;">
+                  <span>Qwen3.5-Coder (Ollama)</span>
+                  <span>↶ Undo Last Edit</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tab 2: Chat + Split-Screen Artifacts -->
+            <div id="panel-artifacts" class="panel-view artifacts-grid">
+              <div class="chat-pane">
+                <div class="user-msg">
+                  Build an interactive quarterly latency &amp; cost telemetry dashboard as a React Artifact.
+                </div>
+                <div class="think-box">
+                  ▾ Thought for 2.4s — Structuring responsive KPI grid, SVG bar series, and export controls.
+                </div>
+                <div class="claude-prose">
+                  Here is the interactive telemetry dashboard. You can inspect or edit the JSX live in the right pane, test mobile viewports, or click <strong>Save to PC</strong> to write it straight into your Vibe Studio workspace.
+                </div>
+                <div style="margin-top:auto;font-family:var(--font-mono);font-size:11px;color:var(--ink-muted);display:flex;gap:14px;">
+                  <span>&lt; Branch 2 / 2 &gt;</span>
+                  <span>•</span>
+                  <span>Style: Concise</span>
+                  <span>•</span>
+                  <span>System Prompt: Custom</span>
+                </div>
+              </div>
+
+              <div class="artifact-preview-pane">
+                <div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--border-hairline);">
+                    <strong style="font-size:13.5px;">Inference Telemetry Dashboard · v2</strong>
+                    <span style="font-family:var(--font-mono);font-size:11px;background:var(--bg-stone);padding:3px 9px;border-radius:6px;">Preview | Code</span>
+                  </div>
+
+                  <div class="metric-cards">
+                    <div class="metric-card">
+                      <div style="font-size:11px;color:var(--ink-muted);">Local Tokens/s</div>
+                      <div class="val">68.4</div>
+                    </div>
+                    <div class="metric-card">
+                      <div style="font-size:11px;color:var(--ink-muted);">API Spend</div>
+                      <div class="val">$0.00</div>
+                    </div>
+                    <div class="metric-card">
+                      <div style="font-size:11px;color:var(--ink-muted);">Active Routes</div>
+                      <div class="val">96</div>
+                    </div>
+                  </div>
+
+                  <div class="bars-demo">
+                    <div style="height:42%;"></div>
+                    <div style="height:58%;"></div>
+                    <div style="height:51%;"></div>
+                    <div style="height:76%;"></div>
+                    <div style="height:69%;"></div>
+                    <div style="height:92%;"></div>
+                    <div style="height:85%;"></div>
+                  </div>
+                </div>
+
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;font-size:12px;color:var(--ink-secondary);">
+                  <span style="font-family:var(--font-mono);font-size:11px;">React 18 · Tailwind · Lucide</span>
+                  <span style="color:var(--terracotta);font-weight:600;">Save to PC Workspace →</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tab 3: 9Router + Ollama Orchestration -->
+            <div id="panel-router" class="panel-view router-grid">
+              <div class="router-col">
+                <div class="pane-label">
+                  <span>9ROUTER GATEWAY (:20128)</span>
+                  <span style="color:var(--sage);">AUTO-STARTED</span>
+                </div>
+                <h3 style="font-family:var(--font-serif);font-size:21px;font-weight:500;margin-bottom:6px;">
+                  Unified Cloud &amp; Subscription Routing
+                </h3>
+                <p style="font-size:13.5px;color:var(--ink-secondary);margin-bottom:14px;">
+                  OpenClaude installs and starts 9Router automatically, embeds its live dashboard, and syncs your API key in one click.
+                </p>
+                <div class="route-row">
+                  <span>Tier 1 · Subscription OAuth</span>
+                  <code>claude-sonnet-4 / gpt-4.1</code>
+                </div>
+                <div class="route-row">
+                  <span>Tier 2 · Low-Cost API Fallback</span>
+                  <code>deepseek-v3 / glm-4.5</code>
+                </div>
+                <div class="route-row">
+                  <span>Tier 3 · Zero-Cost Fallback</span>
+                  <code>gemini-flash / openrouter:free</code>
+                </div>
+              </div>
+
+              <div class="router-col">
+                <div class="pane-label">
+                  <span>LOCAL OLLAMA (:11434)</span>
+                  <span style="color:var(--sage);">0 KEYS REQUIRED</span>
+                </div>
+                <h3 style="font-family:var(--font-serif);font-size:21px;font-weight:500;margin-bottom:6px;">
+                  Offline GGUF Execution &amp; Model Puller
+                </h3>
+                <p style="font-size:13.5px;color:var(--ink-secondary);margin-bottom:14px;">
+                  Runs out of the box against local models on your GPU or CPU with live VRAM residency telemetry and in-app downloads.
+                </p>
+                <div class="route-row">
+                  <span>Qwen3.5-Coder:Q4_K_M</span>
+                  <code style="color:var(--sage);">Loaded · GPU VRAM</code>
+                </div>
+                <div class="route-row">
+                  <span>DeepSeek-R1:8B (Reasoning)</span>
+                  <code>Extended Thinking Ready</code>
+                </div>
+                <div class="route-row">
+                  <span>Llama-3.3 / Gemma-3 Vision</span>
+                  <code>Multimodal Attachments</code>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Core Capabilities Matrix -->
+    <section class="section" id="capabilities">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-kicker">Capabilities</div>
+          <h2>Everything in Claude.ai, plus direct local execution.</h2>
+          <p>
+            Built for engineers and writers who want Anthropic’s calm, high-craft workspace without cloud lock-in, forced telemetry, or per-seat limits.
+          </p>
+        </div>
+
+        <div class="pillars-matrix">
+          <div class="pillar-cell">
+            <div class="pillar-num">01 / VIBE CODING STUDIO</div>
+            <h3>Edit and run files directly on your PC</h3>
+            <p>
+              Point OpenClaude at any folder on your machine. Browse the file tree, edit across tabs, execute PowerShell/Node/Python commands in a streaming terminal, preview web apps live, and let the Vibe Agent apply multi-file changes with instant Undo.
+            </p>
+            <div class="spec-tags">
+              <span>write_file</span>
+              <span>edit_file</span>
+              <span>run_command</span>
+              <span>60-Step Undo</span>
+              <span>1-Click Error Fix</span>
+            </div>
+          </div>
+
+          <div class="pillar-cell">
+            <div class="pillar-num">02 / ARTIFACTS SANDBOX</div>
+            <h3>Live split-screen rendering &amp; versioning</h3>
+            <p>
+              Streams interactive HTML5, React 18 + Tailwind + Lucide components, zoomable SVGs, Mermaid diagrams, and Markdown documents beside your chat. Includes responsive viewport presets, version history, and 1-click export to your PC workspace.
+            </p>
+            <div class="spec-tags">
+              <span>React 18 + JSX</span>
+              <span>HTML / Three.js</span>
+              <span>Mermaid</span>
+              <span>SVG Zoom</span>
+              <span>Save to PC</span>
+            </div>
+          </div>
+
+          <div class="pillar-cell">
+            <div class="pillar-num">03 / DUAL-ENGINE ROUTING</div>
+            <h3>9Router gateway + Local Ollama built in</h3>
+            <p>
+              Automatically installs and launches 9Router on <code>:20128</code> and Ollama on <code>:11434</code>. Swap models mid-thread—use local GGUF weights offline or route across Claude, OpenAI, Gemini, and DeepSeek with automatic failover.
+            </p>
+            <div class="spec-tags">
+              <span>localhost:20128</span>
+              <span>localhost:11434</span>
+              <span>Embedded Dashboard</span>
+              <span>In-App Model Puller</span>
+            </div>
+          </div>
+
+          <div class="pillar-cell">
+            <div class="pillar-num">04 / CUSTOMIZATION &amp; MEMORY</div>
+            <h3>System prompts, Projects, Styles &amp; Branching</h3>
+            <p>
+              Override the master or per-chat system prompt with live template variables. Organize persistent context inside Claude Projects, switch Writing Styles, inspect collapsible Extended Thinking traces, and branch any message non-destructively.
+            </p>
+            <div class="spec-tags">
+              <span>{{user_name}}</span>
+              <span>{{model}}</span>
+              <span>Projects RAG</span>
+              <span>&lt; 1 / 2 &gt; Branching</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Technical Specifications -->
+    <section class="section" id="specifications">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-kicker">Specifications</div>
+          <h2>Concrete architecture. Plain local files.</h2>
+          <p>
+            No opaque cloud database or proprietary wrapper. Conversations, projects, and settings stay in readable JSON on your disk.
+          </p>
+        </div>
+
+        <div class="spec-table-wrap">
+          <table class="spec-table">
+            <tbody>
+              <tr>
+                <th>Desktop Application</th>
+                <td>Native compiled Windows executable (<code>OpenClaude.exe</code>) with custom desktop shortcut icon, warm-parchment startup splash, chromeless app window, and Windows System Tray controller.</td>
+              </tr>
+              <tr>
+                <th>Model Backends</th>
+                <td><strong>Local Ollama</strong> (<code>127.0.0.1:11434</code>, zero API keys) and <strong>9Router</strong> (<code>localhost:20128/v1</code>, 96+ OpenAI-compatible cloud &amp; subscription routes).</td>
+              </tr>
+              <tr>
+                <th>Vibe Coding Protocol</th>
+                <td>Structured <code>&lt;ocAction&gt;</code> streaming tags for <code>write_file</code>, <code>edit_file</code>, <code>read_file</code>, <code>delete_file</code>, and real-time SSE PowerShell execution with process tree cleanup.</td>
+              </tr>
+              <tr>
+                <th>Personalization</th>
+                <td>First-launch display name onboarding, time-of-day literary greetings, warm parchment (<code>#FAF9F5</code>) &amp; obsidian (<code>#21201E</code>) themes, custom Writing Styles, and full System Prompt editor.</td>
+              </tr>
+              <tr>
+                <th>License</th>
+                <td><strong>The Unlicense</strong> (public domain). Retains MIT copyright notice for 9Router integration.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Install Section -->
+    <section class="section" id="install">
+      <div class="container">
+        <div class="install-band">
+          <div>
+            <div class="section-kicker" style="color:#E59377;">Quick Start</div>
+            <h2>Up and running in under a minute.</h2>
+            <p>
+              Clone the repository and launch <code>OpenClaude.exe</code> on Windows—or run the Node server on macOS, Linux, or Windows. 9Router and Ollama are detected and started automatically.
+            </p>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;">
+              <a href="https://github.com/ahpah-dev/OpenClaude/archive/refs/heads/main.zip" class="btn btn-terracotta">
+                Download ZIP (Includes OpenClaude.exe)
+              </a>
+              <a href="https://github.com/ahpah-dev/OpenClaude" target="_blank" rel="noopener" class="btn btn-outline" style="background:transparent;color:#FAF9F5;border-color:rgba(255,255,255,0.22);">
+                Browse Repository
+              </a>
+            </div>
+          </div>
+
+          <div>
+            <div class="code-card">
+              <div class="code-card-head">
+                <span>WINDOWS DESKTOP APP + DESKTOP ICON</span>
+                <button type="button" class="copy-dark" onclick="copyText('git clone https://github.com/ahpah-dev/OpenClaude.git\ncd OpenClaude\npowershell -ExecutionPolicy Bypass -File .\\Create-Desktop-Shortcut.ps1\n.\\OpenClaude.exe', this)">Copy</button>
+              </div>
+              <pre>git clone https://github.com/ahpah-dev/OpenClaude.git
+cd OpenClaude
+powershell -ExecutionPolicy Bypass -File .\Create-Desktop-Shortcut.ps1
+.\OpenClaude.exe</pre>
+            </div>
+
+            <div class="code-card">
+              <div class="code-card-head">
+                <span>CROSS-PLATFORM CLI (WINDOWS / MACOS / LINUX)</span>
+                <button type="button" class="copy-dark" onclick="copyText('git clone https://github.com/ahpah-dev/OpenClaude.git\ncd OpenClaude\nnpm install && npm run build && npm start', this)">Copy</button>
+              </div>
+              <pre>git clone https://github.com/ahpah-dev/OpenClaude.git
+cd OpenClaude
+npm install &amp;&amp; npm run build &amp;&amp; npm start</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container footer-inner">
+      <div>
+        <div style="font-family:var(--font-serif);font-size:17px;color:var(--ink-primary);margin-bottom:4px;">
+          OpenClaude
+        </div>
+        <div>
+          Released into the public domain under <a href="https://github.com/ahpah-dev/OpenClaude/blob/main/LICENSE" style="text-decoration:underline;">The Unlicense</a>.
+          9Router integration retains Copyright (c) 2026 9Router Contributors (<a href="https://github.com/ahpah-dev/OpenClaude/blob/main/NOTICE" style="text-decoration:underline;">MIT License</a>).
+        </div>
+      </div>
+
+      <div class="footer-links">
+        <a href="https://github.com/ahpah-dev/OpenClaude" target="_blank" rel="noopener">Repository</a>
+        <a href="https://github.com/ahpah-dev/OpenClaude/issues" target="_blank" rel="noopener">Issues</a>
+        <a href="https://github.com/ahpah-dev/OpenClaude/blob/main/LICENSE" target="_blank" rel="noopener">Unlicense</a>
+        <a href="https://github.com/ahpah-dev/OpenClaude/blob/main/NOTICE" target="_blank" rel="noopener">9Router Notice</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    function switchPanel(id, btn) {
+      document.querySelectorAll('.panel-view').forEach(function (el) {
+        el.classList.remove('active');
+      });
+      document.querySelectorAll('.showcase-tab').forEach(function (el) {
+        el.classList.remove('active');
+      });
+      var target = document.getElementById('panel-' + id);
+      if (target) target.classList.add('active');
+      if (btn) btn.classList.add('active');
+    }
+
+    function copyText(text, btn) {
+      navigator.clipboard.writeText(text).then(function () {
+        var prev = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(function () {
+          btn.textContent = prev;
+        }, 1600);
+      });
+    }
+  </script>
+</body>
+</html>

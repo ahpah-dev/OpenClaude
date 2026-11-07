@@ -9,6 +9,7 @@ import {
   ExternalLink,
   Sliders,
   User,
+  Terminal,
 } from 'lucide-react';
 import { ClaudeStarburst } from './ClaudeIcons.jsx';
 import Composer from './Composer.jsx';
@@ -177,6 +178,7 @@ export default function HomeGreeting({
   onOpenNineRouterDashboard,
   onOpenSystemPromptEditor,
   onEditUsername,
+  onOpenVibeStudio,
 }) {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [seedDraft, setSeedDraft] = useState('');
@@ -244,6 +246,23 @@ export default function HomeGreeting({
               </button>
             );
           })}
+
+          {onOpenVibeStudio && (
+            <button
+              type="button"
+              onClick={onOpenVibeStudio}
+              title="Open Vibe Coding Studio — edit & run files directly on your PC"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border text-xs font-medium transition hover:border-[#D97757] cursor-pointer"
+              style={{
+                backgroundColor: 'var(--accent-claude-soft)',
+                borderColor: 'rgba(217, 119, 87, 0.35)',
+                color: 'var(--accent-claude)',
+              }}
+            >
+              <Terminal size={13.5} />
+              <span>Vibe Code on PC</span>
+            </button>
+          )}
 
           <button
             type="button"

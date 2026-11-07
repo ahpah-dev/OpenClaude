@@ -2,20 +2,24 @@
 
 [![License: Unlicense](https://img.shields.io/badge/license-Unlicense-blue.svg)](LICENSE)
 [![9Router: MIT](https://img.shields.io/badge/9Router-MIT%20License-D97757.svg)](NOTICE)
+[![Website](https://img.shields.io/badge/Website-ahpah--dev.github.io%2FOpenClaude-141413.svg)](https://ahpah-dev.github.io/OpenClaude/)
 
-**OpenClaude** is a complete local desktop & web application replicating the **Claude.ai** interface, typography, Artifacts engine, Projects workspace, Writing Styles, Extended Thinking, Conversation Branching, and Customizable System Prompts—powered seamlessly by **[9Router](https://github.com/decolua/9router)** (`localhost:20128`) and **Local [Ollama](https://ollama.com/)** (`localhost:11434`).
+**OpenClaude** is a complete local desktop & web application replicating the **Claude.ai** interface, typography, Artifacts engine, Projects workspace, Writing Styles, Extended Thinking, Conversation Branching, Customizable System Prompts, and a built-in **Vibe Coding Studio** for editing and running files directly on your PC—powered seamlessly by **[9Router](https://github.com/decolua/9router)** (`localhost:20128`) and **Local [Ollama](https://ollama.com/)** (`localhost:11434`).
+
+🌐 **Landing Page:** **[https://ahpah-dev.github.io/OpenClaude/](https://ahpah-dev.github.io/OpenClaude/)**
 
 ---
 
 ## ⚡ Quick Start
 
-### Option A — One-Click Windows Launcher
-```bash
+### Option A — Native Windows Desktop App (`OpenClaude.exe`)
+```powershell
 git clone https://github.com/ahpah-dev/OpenClaude.git
 cd OpenClaude
-OpenClaude.bat
+powershell -ExecutionPolicy Bypass -File .\Create-Desktop-Shortcut.ps1
+.\OpenClaude.exe
 ```
-*(Or double-click **`OpenClaude-DesktopApp.vbs`** for a frameless native desktop window, or run **`Create-Desktop-Shortcut.ps1`** to pin OpenClaude to your Desktop.)*
+*(Launches a native chromeless OpenClaude window with custom Anthropic-styled Desktop icon, system tray controller, and automatic background startup of OpenClaude `:3099`, 9Router `:20128`, and Ollama `:11434`. You can also run `OpenClaude.bat`.)*
 
 ### Option B — Cross-Platform CLI (Windows / macOS / Linux)
 ```bash
@@ -47,7 +51,13 @@ Then open **http://localhost:3099** (and **http://localhost:20128/dashboard** fo
    - Live sandboxed **HTML5 / Canvas / Three.js WebGL**, **React 18 + Tailwind CSS + Lucide Icons**, **SVG** (zoomable), **Mermaid Diagrams**, and **Markdown Documents**.
    - Includes **Preview | Code** toggle, live code editing, responsive viewport testing (Desktop / Tablet / Mobile), multi-turn **Version History (`v1`, `v2`...)**, runtime error detection with 1-click **"Fix with Claude"**, file downloads, and standalone tab launch.
 
-4. **Customizable System Prompt, Writing Styles & Claude Projects**
+4. **Vibe Coding Studio (Local PC File Editor & Runner)**
+   - Point OpenClaude at any directory on your PC (native Windows folder picker or direct path) or scaffold new Web, Node.js, or Python projects in 1 click.
+   - Multi-tab code editor (`Ctrl+S` save, `Ctrl+Enter` 1-click file runner), live multi-file HTML/localhost preview tab, and a docked streaming PowerShell terminal with process kill & 1-click **"Fix Error with Claude"**.
+   - Autonomous **Vibe Agent** (`<ocAction>` protocol) that reads, writes, diff-edits, and runs commands directly on your machine with an `Auto-apply` toggle and a 60-step **Undo** history.
+   - **Save to PC** button inside every Claude Artifact to export generated apps straight into your local Vibe Studio workspace.
+
+5. **Customizable System Prompt, Writing Styles & Claude Projects**
    - **Master System Prompt Editor** in **Settings → System Prompt** with presets, dynamic variables (`{{date}}`, `{{user_name}}`, `{{model}}`, `{{os}}`), plus **Per-Chat System Prompt Overrides** right in the conversation header.
    - **Writing Styles**: *Normal*, *Concise*, *Explanatory*, *Formal*, plus unlimited custom user styles.
    - **Claude Projects**: Dedicated workspaces with custom **Project Instructions** and **Project Knowledge Base** documents automatically injected into every chat in that project.

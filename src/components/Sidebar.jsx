@@ -19,6 +19,7 @@ import {
   Check,
   X,
   Gauge,
+  Terminal,
 } from 'lucide-react';
 import { ClaudeStarburst, NineRouterBadgeIcon, OllamaIcon } from './ClaudeIcons.jsx';
 
@@ -145,6 +146,18 @@ export default function Sidebar({
 
           <button
             type="button"
+            onClick={() => onNavigate('vibe')}
+            title="Vibe Studio — Edit & run files on PC"
+            className={`w-9 h-9 rounded-xl flex items-center justify-center transition cursor-pointer ${
+              activeView === 'vibe' ? 'bg-black/10 dark:bg-white/10' : 'hover:bg-black/5 dark:hover:bg-white/5'
+            }`}
+            style={{ color: activeView === 'vibe' ? 'var(--accent-claude)' : 'var(--text-secondary)' }}
+          >
+            <Terminal size={17} />
+          </button>
+
+          <button
+            type="button"
             onClick={() => onNavigate('9router-dashboard')}
             title="9Router Dashboard"
             className={`w-9 h-9 rounded-xl flex items-center justify-center transition cursor-pointer relative ${
@@ -253,21 +266,35 @@ export default function Sidebar({
           { id: 'chats', label: 'Chats', Icon: MessageSquare },
           { id: 'projects', label: 'Projects', Icon: FolderKanban },
           { id: 'artifacts', label: 'Artifacts', Icon: Box },
-        ].map(({ id, label, Icon }) => {
+          { id: 'vibe', label: 'Vibe Studio', Icon: Terminal, badge: 'PC' },
+        ].map(({ id, label, Icon, badge }) => {
           const active = activeView === id;
           return (
             <button
               key={id}
               type="button"
               onClick={() => onNavigate(id)}
-              className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-[13.5px] font-medium transition cursor-pointer"
+              className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-[13.5px] font-medium transition cursor-pointer"
               style={{
                 backgroundColor: active ? 'var(--bg-sidebar-active)' : 'transparent',
                 color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
               }}
             >
-              <Icon size={16} />
-              <span>{label}</span>
+              <span className="flex items-center gap-2.5">
+                <Icon size={16} className={id === 'vibe' ? 'text-[#D97757]' : ''} />
+                <span>{label}</span>
+              </span>
+              {badge && (
+                <span
+                  className="text-[10px] font-semibold px-1.5 py-0.2 rounded-md"
+                  style={{
+                    backgroundColor: 'var(--accent-claude-soft)',
+                    color: 'var(--accent-claude)',
+                  }}
+                >
+                  {badge}
+                </span>
+              )}
             </button>
           );
         })}

@@ -27,6 +27,24 @@ import {
   deleteOllamaModel,
   streamOllamaChat,
 } from './services/ollamaService.js';
+import {
+  getDefaultWorkspaceRoot,
+  resolveSafeWorkspacePath,
+  buildWorkspaceTree,
+  flattenTreeSummary,
+  readWorkspaceFile,
+  writeWorkspaceFile,
+  editWorkspaceFile,
+  deleteWorkspaceEntry,
+  createWorkspaceDirectory,
+  renameWorkspaceEntry,
+  undoLastWorkspaceEdit,
+  scaffoldNewProject,
+  pickFolderNativeDialog,
+  openInSystemExplorer,
+  getRunCommandForFile,
+  streamWorkspaceCommand,
+} from './services/workspaceService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.join(__dirname, '..', 'dist');
@@ -59,7 +77,74 @@ Rules for Artifacts:
 5. Keep your conversational explanation outside <antArtifact> concise rather than repeating the code in markdown.
 </artifacts_info>`;
 
-function buildEffectiveSystemPrompt({ settings, conversation, project, modelName, styleOverrideId, artifactsEnabled }) {
+function buildVibeCodingPromptBlock(workspaceRoot) {
+  let treeLines = '(empty directory)';
+  try {
+    const { tree } = buildWorkspaceTree(workspaceRoot, { maxDepth: 3 });
+    const flat = flattenTreeSummary(tree).slice(0, 120);
+    if (flat.length > 0) treeLines = flat.join('\n');
+  } catch {
+    // ignore
+  }
+
+  return `
+<vibe_coding_workspace>
+You are operating inside OpenClaude Vibe Coding Studio with direct local PC file & shell tools rooted at:
+Workspace Directory: ${workspaceRoot}
+
+Current Files on Disk:
+${treeLines}
+
+Whenever creating, editing, reading, deleting, or running files on the user's PC, emit structured <ocAction> tags (NOT markdown code fences for file writes):
+
+1. Create or overwrite a file on disk (always write complete, runnable code with zero placeholders):
+<ocAction type="write_file" path="index.html">
+<!DOCTYPE html>
+...complete file content...
+</ocAction>
+
+2. Apply a targeted edit to an existing file:
+<ocAction type="edit_file" path="src/app.js">
+<search>
+exact lines to find
+</search>
+<replace>
+new lines
+</replace>
+</ocAction>
+
+3. Read an existing file before editing if you haven't seen its contents yet:
+<ocAction type="read_file" path="package.json"></ocAction>
+
+4. Execute a shell command inside the workspace directory (tests, scripts, builds, installs):
+<ocAction type="run_command">node index.js</ocAction>
+
+5. Delete an obsolete file:
+<ocAction type="delete_file" path="old.txt"></ocAction>
+
+Rules:
+- Always use clean relative paths inside the workspace (e.g., "index.html", "style.css", "src/main.py").
+- You can emit multiple <ocAction> blocks in a single turn to scaffold complete multi-file apps!
+- Keep surrounding explanation concise and direct.
+</vibe_coding_workspace>`;
+}
+
+function getEffectiveWorkspaceRoot() {
+  const saved = store.getSettings()?.vibeWorkspace?.rootPath;
+  if (saved && fs.existsSync(saved)) return path.resolve(saved);
+  return getDefaultWorkspaceRoot();
+}
+
+function buildEffectiveSystemPrompt({
+  settings,
+  conversation,
+  project,
+  modelName,
+  styleOverrideId,
+  artifactsEnabled,
+  vibeMode = false,
+  workspaceRoot = null,
+}) {
   const baseTemplate =
     (conversation?.systemPromptOverride && conversation.systemPromptOverride.trim()) ||
     settings?.systemPrompt?.customSystemPrompt ||
@@ -106,13 +191,17 @@ function buildEffectiveSystemPrompt({ settings, conversation, project, modelName
     prompt += projSection;
   }
 
-  const shouldIncludeArtifacts =
-    artifactsEnabled !== false &&
-    settings?.generation?.artifactsEnabled !== false &&
-    settings?.systemPrompt?.enableArtifactsProtocol !== false;
+  if (vibeMode) {
+    prompt += `\n\n${buildVibeCodingPromptBlock(workspaceRoot || getEffectiveWorkspaceRoot())}`;
+  } else {
+    const shouldIncludeArtifacts =
+      artifactsEnabled !== false &&
+      settings?.generation?.artifactsEnabled !== false &&
+      settings?.systemPrompt?.enableArtifactsProtocol !== false;
 
-  if (shouldIncludeArtifacts) {
-    prompt += `\n\n${ARTIFACTS_SYSTEM_SPEC}`;
+    if (shouldIncludeArtifacts) {
+      prompt += `\n\n${ARTIFACTS_SYSTEM_SPEC}`;
+    }
   }
 
   return prompt;
@@ -160,7 +249,7 @@ app.post('/api/system/open-9router-dashboard', async (_req, res) => {
   res.json({ success: true, dashboardUrl });
 });
 
-app.post('/api/system/install-9router', async (req, res) => {
+app.post('/api/system/install-9router', async (_req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -193,7 +282,6 @@ app.post('/api/system/9router-connect', async (req, res) => {
       apiKey = provisioned.apiKey;
     }
 
-    // Save API key & base URL
     store.updateSettings({
       nineRouter: {
         ...settings.nineRouter,
@@ -238,7 +326,221 @@ app.post('/api/system/install-ollama', async (_req, res) => {
   res.end();
 });
 
-// Unified Models Discovery (9Router + Local Ollama)
+// ============================================================================
+// LOCAL PC VIBE CODING WORKSPACE & TERMINAL ENDPOINTS
+// ============================================================================
+
+app.get('/api/workspace/tree', (_req, res) => {
+  try {
+    const root = getEffectiveWorkspaceRoot();
+    res.json(buildWorkspaceTree(root));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/workspace/set-root', (req, res) => {
+  try {
+    const rawPath = (req.body?.rootPath || '').trim();
+    if (!rawPath) return res.status(400).json({ error: 'Folder path is required.' });
+    const resolved = path.resolve(rawPath);
+    if (!fs.existsSync(resolved)) {
+      fs.mkdirSync(resolved, { recursive: true });
+    }
+    const stat = fs.statSync(resolved);
+    if (!stat.isDirectory()) {
+      return res.status(400).json({ error: 'Selected path is not a directory.' });
+    }
+    const settings = store.getSettings();
+    store.updateSettings({
+      vibeWorkspace: {
+        ...(settings.vibeWorkspace || {}),
+        rootPath: resolved,
+      },
+    });
+    res.json(buildWorkspaceTree(resolved));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/workspace/pick-folder', async (_req, res) => {
+  try {
+    const current = getEffectiveWorkspaceRoot();
+    const picked = await pickFolderNativeDialog(current);
+    if (!picked) {
+      return res.json({ cancelled: true });
+    }
+    const settings = store.getSettings();
+    store.updateSettings({
+      vibeWorkspace: {
+        ...(settings.vibeWorkspace || {}),
+        rootPath: picked,
+      },
+    });
+    res.json({ cancelled: false, ...buildWorkspaceTree(picked) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/workspace/new-project', (req, res) => {
+  try {
+    const { name, template = 'web', parentDir } = req.body || {};
+    const createdDir = scaffoldNewProject(parentDir || getDefaultWorkspaceRoot(), name, template);
+    const settings = store.getSettings();
+    store.updateSettings({
+      vibeWorkspace: {
+        ...(settings.vibeWorkspace || {}),
+        rootPath: createdDir,
+      },
+    });
+    res.json(buildWorkspaceTree(createdDir));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/workspace/file', (req, res) => {
+  try {
+    const filePath = String(req.query.path || '');
+    if (!filePath) return res.status(400).json({ error: 'path query parameter required' });
+    const data = readWorkspaceFile(getEffectiveWorkspaceRoot(), filePath);
+    res.json({
+      ...data,
+      runCommand: getRunCommandForFile(data.path),
+    });
+  } catch (err) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
+app.post('/api/workspace/file', (req, res) => {
+  try {
+    const { path: filePath, content = '' } = req.body || {};
+    if (!filePath) return res.status(400).json({ error: 'File path is required' });
+    const result = writeWorkspaceFile(getEffectiveWorkspaceRoot(), filePath, content);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/workspace/edit', (req, res) => {
+  try {
+    const { path: filePath, search, replace } = req.body || {};
+    if (!filePath) return res.status(400).json({ error: 'File path is required' });
+    const result = editWorkspaceFile(getEffectiveWorkspaceRoot(), filePath, { search, replace });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/workspace/file', (req, res) => {
+  try {
+    const targetPath = req.body?.path || req.query?.path;
+    if (!targetPath) return res.status(400).json({ error: 'Target path required' });
+    res.json(deleteWorkspaceEntry(getEffectiveWorkspaceRoot(), targetPath));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/workspace/mkdir', (req, res) => {
+  try {
+    const { path: dirPath } = req.body || {};
+    if (!dirPath) return res.status(400).json({ error: 'Directory path required' });
+    res.json(createWorkspaceDirectory(getEffectiveWorkspaceRoot(), dirPath));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/workspace/rename', (req, res) => {
+  try {
+    const { oldPath, newPath } = req.body || {};
+    res.json(renameWorkspaceEntry(getEffectiveWorkspaceRoot(), oldPath, newPath));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/workspace/undo', (req, res) => {
+  try {
+    res.json(undoLastWorkspaceEdit(req.body?.undoId || null));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/workspace/open-explorer', (req, res) => {
+  const root = getEffectiveWorkspaceRoot();
+  const sub = req.body?.path ? resolveSafeWorkspacePath(root, req.body.path) : root;
+  openInSystemExplorer(sub);
+  res.json({ success: true });
+});
+
+app.post('/api/workspace/exec', async (req, res) => {
+  const { command, cwd } = req.body || {};
+  if (!command || !String(command).trim()) {
+    return res.status(400).json({ error: 'Command required' });
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  const controller = new AbortController();
+  res.on('close', () => {
+    if (!res.writableEnded) controller.abort();
+  });
+
+  const send = (obj) => {
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify(obj)}\n\n`);
+    }
+  };
+
+  try {
+    const root = cwd ? resolveSafeWorkspacePath(getEffectiveWorkspaceRoot(), cwd) : getEffectiveWorkspaceRoot();
+    await streamWorkspaceCommand({
+      workspaceRoot: root,
+      command: String(command),
+      signal: controller.signal,
+      onEvent: send,
+    });
+  } catch (err) {
+    send({ type: 'stderr', text: `${err.message}\n` });
+    send({ type: 'exit', exitCode: 1, durationMs: 0 });
+  } finally {
+    if (!res.writableEnded) res.end();
+  }
+});
+
+// Serve live workspace static files for multi-file HTML/JS/CSS/3D previews!
+app.get('/api/workspace/preview/{*relPath}', (req, res) => {
+  try {
+    const rawParam = Array.isArray(req.params.relPath)
+      ? req.params.relPath.join('/')
+      : req.params.relPath || 'index.html';
+    const abs = resolveSafeWorkspacePath(getEffectiveWorkspaceRoot(), rawParam);
+    if (!fs.existsSync(abs) || fs.statSync(abs).isDirectory()) {
+      const idx = path.join(abs, 'index.html');
+      if (fs.existsSync(idx)) return res.sendFile(idx);
+      return res.status(404).send('File not found in workspace');
+    }
+    res.sendFile(abs);
+  } catch (err) {
+    res.status(403).send(err.message);
+  }
+});
+
+// ============================================================================
+// UNIFIED MODELS, SETTINGS, PROJECTS & CONVERSATIONS
+// ============================================================================
+
 app.get('/api/models', async (_req, res) => {
   const settings = store.getSettings();
   const [nineSettled, ollamaSettled] = await Promise.allSettled([
@@ -261,7 +563,6 @@ app.get('/api/models', async (_req, res) => {
       ? ollamaSettled.value
       : { models: [], error: ollamaSettled.reason?.message || 'Unreachable' };
 
-  // Pick smart recommended model if none selected yet
   let recommended = null;
   if (settings.nineRouter?.apiKey && nineData.models.length > 0) {
     recommended = { backend: '9router', model: nineData.models[0].id };
@@ -286,7 +587,6 @@ app.get('/api/models', async (_req, res) => {
   });
 });
 
-// Ollama Model Pull & Delete
 app.post('/api/ollama/pull', async (req, res) => {
   const { model } = req.body || {};
   if (!model) return res.status(400).json({ error: 'Model name required' });
@@ -330,7 +630,6 @@ app.delete('/api/ollama/models', async (req, res) => {
   }
 });
 
-// Settings API
 app.get('/api/settings', (_req, res) => {
   const s = store.getSettings();
   res.json({
@@ -347,7 +646,6 @@ app.get('/api/settings', (_req, res) => {
 
 app.put('/api/settings', (req, res) => {
   const patch = { ...req.body };
-  // Preserve existing apiKey unless explicitly updated
   if (patch.nineRouter && patch.nineRouter.apiKey === undefined) {
     patch.nineRouter.apiKey = store.getSettings().nineRouter?.apiKey || '';
   }
@@ -364,7 +662,6 @@ app.put('/api/settings', (req, res) => {
   });
 });
 
-// Projects API
 app.get('/api/projects', (_req, res) => {
   res.json({ projects: store.listProjects() });
 });
@@ -402,7 +699,6 @@ app.delete('/api/projects/:id/knowledge/:docId', (req, res) => {
   res.json({ success: ok });
 });
 
-// Conversations API
 app.get('/api/conversations', (_req, res) => {
   res.json({ conversations: store.listConversations() });
 });
@@ -451,32 +747,7 @@ app.post('/api/import', (req, res) => {
   }
 });
 
-// Optional Web URL context fetcher when user pastes a link with Web Context enabled
-app.post('/api/web-fetch', async (req, res) => {
-  try {
-    const { url } = req.body || {};
-    if (!url || !/^https?:\/\//i.test(url)) {
-      return res.status(400).json({ error: 'Valid http/https URL required' });
-    }
-    const resp = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 OpenClaude/1.0' },
-      signal: AbortSignal.timeout(8000),
-    });
-    const html = await resp.text();
-    const stripped = html
-      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 24000);
-    res.json({ url, content: stripped });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Unified SSE Chat Streaming Endpoint
+// Unified SSE Chat Streaming Endpoint (supports both Standard Artifacts Mode & Vibe Coding PC Mode)
 app.post('/api/chat/stream', async (req, res) => {
   const {
     backend = 'ollama',
@@ -488,6 +759,8 @@ app.post('/api/chat/stream', async (req, res) => {
     styleId,
     extendedThinking,
     artifactsEnabled,
+    vibeMode = false,
+    workspaceRoot = null,
     temperature,
     maxTokens,
   } = req.body || {};
@@ -527,6 +800,8 @@ app.post('/api/chat/stream', async (req, res) => {
       modelName: model,
       styleOverrideId: styleId,
       artifactsEnabled,
+      vibeMode: !!vibeMode,
+      workspaceRoot: workspaceRoot || getEffectiveWorkspaceRoot(),
     });
 
     const genOpts = {
@@ -586,7 +861,6 @@ if (fs.existsSync(DIST_DIR)) {
 
 app.listen(PORT, '127.0.0.1', () => {
   pushSetupLog(`OpenClaude server listening on http://localhost:${PORT}`, 'success');
-  // Kick off automated background check & startup for 9Router + Ollama!
   ensureAutoSetupOnBoot(store.getSettings()).catch((err) => {
     pushSetupLog(`Background setup warning: ${err.message}`, 'warn');
   });

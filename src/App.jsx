@@ -7,6 +7,7 @@ import ArtifactPanel from './components/ArtifactPanel.jsx';
 import ProjectsView from './components/ProjectsView.jsx';
 import ChatsArchiveView from './components/ChatsArchiveView.jsx';
 import ArtifactsGallery from './components/ArtifactsGallery.jsx';
+import VibeCodingStudio from './components/VibeCodingStudio.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import SetupWizardModal from './components/SetupWizardModal.jsx';
 import WelcomeModal from './components/WelcomeModal.jsx';
@@ -44,7 +45,9 @@ export default function App() {
   const [allSavedArtifacts, setAllSavedArtifacts] = useState([]);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeView, setActiveView] = useState('home'); // 'home' | 'chat' | 'chats' | 'projects' | 'artifacts' | '9router-dashboard'
+  const [activeView, setActiveView] = useState(() =>
+    typeof window !== 'undefined' && window.location.hash === '#vibe' ? 'vibe' : 'home'
+  ); // 'home' | 'chat' | 'chats' | 'projects' | 'artifacts' | 'vibe' | '9router-dashboard'
   const [activeArtifact, setActiveArtifact] = useState(null);
 
   const [selectedBackend, setSelectedBackend] = useState('ollama');
@@ -155,8 +158,17 @@ export default function App() {
         setSidebarCollapsed((v) => !v);
       }
     };
+    const onHash = () => {
+      if (window.location.hash === '#vibe') {
+        setActiveView('vibe');
+      }
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('hashchange', onHash);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('hashchange', onHash);
+    };
   }, []);
 
   const handleSaveSettings = async (patch) => {
@@ -561,6 +573,10 @@ export default function App() {
             onOpenNineRouterDashboard={() => setActiveView('9router-dashboard')}
             onOpenSystemPromptEditor={() => setSettingsModalTab('system-prompt')}
             onEditUsername={() => setShowWelcomeModal(true)}
+            onOpenVibeStudio={() => {
+              setActiveArtifact(null);
+              setActiveView('vibe');
+            }}
           />
         )}
 
@@ -695,6 +711,16 @@ export default function App() {
           />
         )}
 
+        {activeView === 'vibe' && (
+          <VibeCodingStudio
+            selectedBackend={selectedBackend}
+            selectedModel={selectedModel}
+            modelsData={modelsData}
+            onSelectModel={sharedComposerProps.onSelectModel}
+            extendedThinking={extendedThinking}
+          />
+        )}
+
         {/* Integrated Live 9Router Dashboard Workspace */}
         {activeView === '9router-dashboard' && (
           <div className="flex-1 h-full flex flex-col min-w-0">
@@ -779,6 +805,10 @@ export default function App() {
                 ? (fixPrompt) => handleSendMessage({ content: fixPrompt, attachments: [] })
                 : undefined
             }
+            onOpenVibeStudio={() => {
+              setActiveArtifact(null);
+              setActiveView('vibe');
+            }}
           />
         )}
       </main>
