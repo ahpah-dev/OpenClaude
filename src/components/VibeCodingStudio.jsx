@@ -68,9 +68,17 @@ function ActionCard({ act, status, onApply, onOpen }) {
         <Icon size={13} className="shrink-0 text-[#D97757]" />
         <span className="text-[12px] font-semibold shrink-0">{meta.label}</span>
         <span
-          className="text-[12px] font-mono truncate min-w-0 flex-1"
+          onClick={(e) => {
+            if (act.path && act.type !== 'run_command' && act.type !== 'delete_file') {
+              e.preventDefault();
+              onOpen();
+            }
+          }}
+          className={`text-[12px] font-mono truncate min-w-0 flex-1 ${
+            act.path && act.type !== 'run_command' && act.type !== 'delete_file' ? 'hover:underline hover:text-[#D97757]' : ''
+          }`}
           style={{ color: 'var(--text-secondary)' }}
-          title={subject}
+          title={act.path ? `Open ${act.path} in editor` : subject}
         >
           {subject}
         </span>
@@ -116,14 +124,14 @@ function ActionCard({ act, status, onApply, onOpen }) {
           )}
         </div>
       )}
-      {act.path && act.type !== 'run_command' && act.type !== 'delete_file' && state === 'done' && (
+      {act.path && act.type !== 'run_command' && act.type !== 'delete_file' && (
         <button
           type="button"
           onClick={onOpen}
           className="w-full text-left px-3 py-1.5 border-t text-[11px] hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
           style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-muted)' }}
         >
-          Open in editor
+          {state === 'done' && act.type !== 'read_file' ? 'View changes in editor' : 'Open in editor'}
         </button>
       )}
     </details>
@@ -260,6 +268,8 @@ export default function VibeCodingStudio({
   const [vibeMessages, setVibeMessages] = useState([]);
   const [vibePrompt, setVibePrompt] = useState('');
   const [vibeStreaming, setVibeStreaming] = useState(false);
+  const [fileChanges, setFileChanges] = useState({}); // path -> { type, search, replace, lines }
+  const [dismissedChange, setDismissedChange] = useState('');
   const [actionStatuses, setActionStatuses] = useState({}); // key: `${msgId}_${idx}` -> { status, detail }
   const vibeAbortRef = useRef(null);
   const chatScrollRef = useRef(null);
@@ -466,6 +476,8 @@ export default function VibeCodingStudio({
         });
         await loadWorkspaceTree(false);
         await openFileInTab(res.path);
+        setFileChanges((prev) => ({ ...prev, [res.path]: { type: 'write', created: !!res.created, lines: res.lines } }));
+        setDismissedChange('');
         setPreviewNonce((n) => n + 1);
         setActionStatuses((prev) => ({
           ...prev,
@@ -481,6 +493,8 @@ export default function VibeCodingStudio({
         });
         await loadWorkspaceTree(false);
         await openFileInTab(res.path);
+        setFileChanges((prev) => ({ ...prev, [res.path]: { type: 'edit', search: action.search, replace: action.replace } }));
+        setDismissedChange('');
         setPreviewNonce((n) => n + 1);
         setActionStatuses((prev) => ({
           ...prev,
@@ -1002,7 +1016,33 @@ export default function VibeCodingStudio({
               />
             </div>
           ) : activeTab ? (
-            <div className="flex-1 min-h-0 flex overflow-hidden" style={{ backgroundColor: '#181715' }}>
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden" style={{ backgroundColor: '#181715' }}>
+              {fileChanges[activeTab.path] && dismissedChange !== activeTab.path && (
+                <div className="shrink-0 border-b border-white/10 bg-[#1B1A18] text-[12px] font-mono max-h-44 overflow-auto">
+                  <div className="flex items-center justify-between px-3 py-1.5 text-[11px] text-[#A8A59C] font-sans sticky top-0 bg-[#1B1A18]">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles size={12} className="text-[#D97757]" />
+                      {fileChanges[activeTab.path].type === 'write'
+                        ? `Claude ${fileChanges[activeTab.path].created ? 'created' : 'rewrote'} this file (${fileChanges[activeTab.path].lines} lines)`
+                        : "Claude's last edit"}
+                    </span>
+                    <button type="button" onClick={() => setDismissedChange(activeTab.path)} className="hover:text-white cursor-pointer">
+                      <X size={12} />
+                    </button>
+                  </div>
+                  {fileChanges[activeTab.path].type === 'edit' && (
+                    <>
+                      {(fileChanges[activeTab.path].search || '').split('\n').map((l, i) => (
+                        <div key={`s${i}`} className="px-3 whitespace-pre-wrap break-all bg-red-500/15 text-red-300">- {l}</div>
+                      ))}
+                      {(fileChanges[activeTab.path].replace || '').split('\n').map((l, i) => (
+                        <div key={`r${i}`} className="px-3 whitespace-pre-wrap break-all bg-emerald-500/15 text-emerald-300">+ {l}</div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              )}
+              <div className="flex-1 min-h-0 flex overflow-hidden">
               <div
                 className="py-4 px-3 text-right font-mono text-[12px] leading-[1.6] select-none overflow-hidden shrink-0"
                 style={{ color: '#6E6B62', backgroundColor: '#141312' }}
@@ -1037,6 +1077,7 @@ export default function VibeCodingStudio({
                 spellCheck={false}
                 className="flex-1 p-4 bg-transparent text-[#F2F0E8] font-mono text-[13px] leading-[1.6] resize-none focus:outline-none overflow-auto"
               />
+              </div>
             </div>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-3">
