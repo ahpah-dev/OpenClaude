@@ -16,17 +16,22 @@ import {
   ChevronRight,
   ChevronDown,
   FileCode,
+  FileText,
   Folder,
-  CheckCircle2,
   AlertTriangle,
-  Sparkles,
   ArrowUp,
   Undo2,
   Wrench,
   X,
   Plus,
+  Pencil,
+  Check,
+  Loader2,
+  Brain,
+  Shield,
+  Zap,
 } from 'lucide-react';
-import { ClaudeStarburst, NineRouterBadgeIcon, OllamaIcon } from './ClaudeIcons.jsx';
+import { ClaudeStarburst } from './ClaudeIcons.jsx';
 import MarkdownRenderer from './MarkdownRenderer.jsx';
 import { apiRequest, consumeSSE } from '../lib/api.js';
 import { parseVibeResponse } from '../lib/vibeParser.js';
@@ -104,6 +109,188 @@ function FileTreeItem({ node, depth = 0, activePath, onOpenFile, onDeleteEntry }
   );
 }
 
+const TOOL_META = {
+  write_file: { icon: FilePlus, verb: 'Created' },
+  edit_file: { icon: Pencil, verb: 'Edited' },
+  read_file: { icon: FileText, verb: 'Read' },
+  delete_file: { icon: Trash2, verb: 'Deleted' },
+  run_command: { icon: Terminal, verb: 'Ran' },
+};
+
+const MAX_DIFF_LINES = 160;
+
+function DiffLines({ lines, sign }) {
+  const shown = lines.slice(0, MAX_DIFF_LINES);
+  const isAdd = sign === '+';
+  return (
+    <>
+      {shown.map((line, i) => (
+        <div
+          key={`${sign}${i}`}
+          className="flex whitespace-pre-wrap break-all"
+          style={{
+            backgroundColor: isAdd ? 'rgba(68, 179, 122, 0.13)' : 'rgba(229, 90, 81, 0.13)',
+          }}
+        >
+          <span
+            className="w-5 shrink-0 text-center select-none"
+            style={{ color: isAdd ? 'var(--accent-green)' : 'var(--accent-danger)' }}
+          >
+            {sign}
+          </span>
+          <span className="flex-1 pr-2">{line || ' '}</span>
+        </div>
+      ))}
+      {lines.length > MAX_DIFF_LINES && (
+        <div className="px-5 py-1 italic" style={{ color: 'var(--text-muted)' }}>
+          … {lines.length - MAX_DIFF_LINES} more lines
+        </div>
+      )}
+    </>
+  );
+}
+
+// One compact, collapsible tool-call row — the way Claude Code lists Edit / Write / Read / Bash steps.
+function ToolRow({ action, status, autoApply, streaming, onApply, onOpenFile }) {
+  const [open, setOpen] = useState(false);
+  const meta = TOOL_META[action.type] || TOOL_META.write_file;
+  const Icon = meta.icon;
+  const state = status?.status;
+  const awaiting = !state && !autoApply && action.complete;
+  const writing = !state && !action.complete && streaming;
+
+  const addLines = action.type === 'write_file' ? (action.body || '').split('\n') : [];
+  const searchLines = action.type === 'edit_file' && action.search ? action.search.split('\n') : [];
+  const replaceLines = action.type === 'edit_file' && action.replace ? action.replace.split('\n') : [];
+
+  let stat = null;
+  if (action.type === 'write_file' && action.body) stat = { add: addLines.length };
+  else if (action.type === 'edit_file') stat = { add: replaceLines.length, del: searchLines.length };
+
+  const isCommand = action.type === 'run_command';
+  const label = isCommand ? (action.body || '').trim().split('\n')[0] : action.path;
+  const expandable = isCommand || addLines.length > 0 || searchLines.length > 0 || replaceLines.length > 0;
+  const verb = writing ? (action.type === 'run_command' ? 'Running' : 'Writing') : meta.verb;
+
+  return (
+    <div
+      className="rounded-xl border overflow-hidden text-[13px]"
+      style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}
+    >
+      <div
+        onClick={() => expandable && setOpen(!open)}
+        className={`flex items-center gap-2 px-3 py-2 ${expandable ? 'cursor-pointer hover:bg-black/[0.03] dark:hover:bg-white/[0.03]' : ''}`}
+      >
+        <Icon size={14} className="shrink-0" style={{ color: 'var(--text-muted)' }} />
+        <span className="font-medium shrink-0" style={{ color: 'var(--text-secondary)' }}>
+          {verb}
+        </span>
+        <span
+          onClick={(e) => {
+            if (!isCommand && action.path && action.type !== 'delete_file') {
+              e.stopPropagation();
+              onOpenFile(action.path);
+            }
+          }}
+          className={`font-mono text-[12px] truncate min-w-0 ${
+            !isCommand && action.type !== 'delete_file' ? 'hover:underline cursor-pointer' : ''
+          }`}
+          style={{ color: 'var(--text-primary)' }}
+        >
+          {label || '…'}
+        </span>
+
+        <span className="ml-auto flex items-center gap-2.5 shrink-0">
+          {stat && (
+            <span className="font-mono text-[11px] flex items-center gap-1.5">
+              {stat.add > 0 && <span style={{ color: 'var(--accent-green)' }}>+{stat.add}</span>}
+              {stat.del > 0 && <span style={{ color: 'var(--accent-danger)' }}>−{stat.del}</span>}
+            </span>
+          )}
+          {state === 'running' || writing ? (
+            <Loader2 size={13} className="animate-spin" style={{ color: 'var(--accent-claude)' }} />
+          ) : state === 'done' ? (
+            <Check size={14} style={{ color: 'var(--accent-green)' }} />
+          ) : state === 'error' ? (
+            <span className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--accent-danger)' }}>
+              <AlertTriangle size={12} /> {status.detail || 'Failed'}
+            </span>
+          ) : awaiting ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onApply();
+              }}
+              className="px-2.5 py-0.5 rounded-lg text-[11px] font-medium text-white cursor-pointer hover:opacity-90"
+              style={{ backgroundColor: 'var(--accent-claude)' }}
+            >
+              {isCommand ? 'Run' : 'Allow'}
+            </button>
+          ) : null}
+          {expandable && (
+            <ChevronDown
+              size={13}
+              className={`transition-transform ${open ? 'rotate-180' : ''}`}
+              style={{ color: 'var(--text-muted)' }}
+            />
+          )}
+        </span>
+      </div>
+
+      {open && expandable && (
+        <div
+          className="border-t font-mono text-[11.5px] leading-[1.55] max-h-72 overflow-auto"
+          style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--bg-code)', color: '#E6E4DC' }}
+        >
+          {isCommand ? (
+            <div className="px-3 py-2 whitespace-pre-wrap break-all">
+              <div style={{ color: '#F2B880' }}>$ {(action.body || '').trim()}</div>
+              {status?.output && <div className="mt-1.5 opacity-80">{status.output}</div>}
+            </div>
+          ) : (
+            <div className="py-1.5">
+              {action.type === 'write_file' && <DiffLines lines={addLines} sign="+" />}
+              {action.type === 'edit_file' && (
+                <>
+                  <DiffLines lines={searchLines} sign="-" />
+                  <DiffLines lines={replaceLines} sign="+" />
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ThinkingBlock({ text, live }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="text-[13px]">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 cursor-pointer hover:opacity-80"
+        style={{ color: 'var(--text-muted)' }}
+      >
+        <Brain size={13} />
+        <span>{live ? 'Thinking…' : 'Thought process'}</span>
+        <ChevronRight size={12} className={`transition-transform ${open ? 'rotate-90' : ''}`} />
+      </button>
+      {open && (
+        <div
+          className="mt-1.5 ml-1.5 pl-3 border-l-2 whitespace-pre-wrap text-[12.5px] leading-relaxed max-h-60 overflow-y-auto"
+          style={{ borderColor: 'var(--border-strong)', color: 'var(--text-secondary)' }}
+        >
+          {text}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function VibeCodingStudio({
   selectedBackend,
   selectedModel,
@@ -117,7 +304,17 @@ export default function VibeCodingStudio({
 
   // Open Editor Tabs: [{ path, content, savedContent, runCommand }]
   const [tabs, setTabs] = useState([]);
-  const [activeTabPath, setActiveTabPath] = useState(''); // or '__preview__'
+  const [activeTabPath, setActiveTabPath] = useState('');
+  // Right-hand workspace panel (Claude Code style): files | code | preview | terminal
+  const [rightOpen, setRightOpen] = useState(false);
+  const [rightTab, setRightTab] = useState('files');
+  const [modeMenuOpen, setModeMenuOpen] = useState(false);
+  const gutterRef = useRef(null);
+
+  const showPanel = (tab) => {
+    setRightTab(tab);
+    setRightOpen(true);
+  };
   const [previewEntry, setPreviewEntry] = useState('index.html');
   const [customPreviewUrl, setCustomPreviewUrl] = useState('');
   const [previewNonce, setPreviewNonce] = useState(0);
@@ -128,7 +325,6 @@ export default function VibeCodingStudio({
   const [newProjectTemplate, setNewProjectTemplate] = useState('web');
 
   // Terminal State
-  const [terminalOpen, setTerminalOpen] = useState(true);
   const [terminalCmd, setTerminalCmd] = useState('');
   const [cmdHistory, setCmdHistory] = useState([]);
   const [historyIdx, setHistoryIdx] = useState(-1);
@@ -196,7 +392,7 @@ export default function VibeCodingStudio({
     }
   }, [vibeMessages, vibeStreaming]);
 
-  const openFileInTab = async (relPath) => {
+  const openFileInTab = async (relPath, reveal = true) => {
     try {
       const fileData = await apiRequest(`/api/workspace/file?path=${encodeURIComponent(relPath)}`);
       setTabs((prev) => {
@@ -219,6 +415,7 @@ export default function VibeCodingStudio({
         ];
       });
       setActiveTabPath(fileData.path);
+      if (reveal) showPanel('code');
       if (fileData.path.endsWith('.html')) {
         setPreviewEntry(fileData.path);
       }
@@ -266,7 +463,6 @@ export default function VibeCodingStudio({
     if (!trimmed) return { exitCode: 0, output: '' };
     if (isExecRunning) execAbortRef.current?.abort();
 
-    setTerminalOpen(true);
     setIsExecRunning(true);
     setLastFailedOutput(null);
     setCmdHistory((prev) => [trimmed, ...prev.filter((x) => x !== trimmed)].slice(0, 40));
@@ -330,7 +526,7 @@ export default function VibeCodingStudio({
     if (activeTab.path.endsWith('.html')) {
       setPreviewEntry(activeTab.path);
       setCustomPreviewUrl('');
-      setActiveTabPath('__preview__');
+      showPanel('preview');
       setPreviewNonce((n) => n + 1);
       return;
     }
@@ -350,7 +546,7 @@ export default function VibeCodingStudio({
           body: { path: action.path, content: action.body },
         });
         await loadWorkspaceTree(false);
-        await openFileInTab(res.path);
+        await openFileInTab(res.path, false);
         setPreviewNonce((n) => n + 1);
         setActionStatuses((prev) => ({
           ...prev,
@@ -365,7 +561,7 @@ export default function VibeCodingStudio({
           body: { path: action.path, search: action.search, replace: action.replace },
         });
         await loadWorkspaceTree(false);
-        await openFileInTab(res.path);
+        await openFileInTab(res.path, false);
         setPreviewNonce((n) => n + 1);
         setActionStatuses((prev) => ({
           ...prev,
@@ -402,7 +598,11 @@ export default function VibeCodingStudio({
         const execRes = await runCommandOnPc(cmd);
         setActionStatuses((prev) => ({
           ...prev,
-          [key]: { status: execRes.exitCode === 0 ? 'done' : 'error', detail: `Exit ${execRes.exitCode}` },
+          [key]: {
+            status: execRes.exitCode === 0 ? 'done' : 'error',
+            detail: `Exit ${execRes.exitCode}`,
+            output: execRes.output,
+          },
         }));
         return {
           kind: 'observation',
@@ -433,7 +633,7 @@ export default function VibeCodingStudio({
 
     // Include open active file context hint if user has a file focused
     let contextAugmented = promptText;
-    if (activeTab && activeTab.path !== '__preview__') {
+    if (activeTab) {
       contextAugmented = `[Currently open file in editor: ${activeTab.path}]\n\n${promptText}`;
     }
 
@@ -528,7 +728,7 @@ export default function VibeCodingStudio({
       }
 
       if (wroteHtml) {
-        setActiveTabPath('__preview__');
+        showPanel('preview');
         setPreviewNonce((n) => n + 1);
       }
 
@@ -559,7 +759,7 @@ export default function VibeCodingStudio({
       await loadWorkspaceTree(false);
       // Reload any open tab matching reverted file
       for (const t of tabs) {
-        await openFileInTab(t.path).catch(() => {});
+        await openFileInTab(t.path, false).catch(() => {});
       }
       setPreviewNonce((n) => n + 1);
       setTerminalLogs((prev) => [
@@ -575,278 +775,607 @@ export default function VibeCodingStudio({
     ? customPreviewUrl.trim()
     : `/api/workspace/preview/${previewEntry}?t=${previewNonce}`;
 
+
+  const pickFolder = async () => {
+    const res = await apiRequest('/api/workspace/pick-folder', { method: 'POST' });
+    if (!res.cancelled) {
+      setWorkspace(res);
+      setRootPathInput(res.root);
+      setTabs([]);
+      setActiveTabPath('');
+    }
+  };
+
+  const togglePanel = (tab) => {
+    if (rightOpen && rightTab === tab) setRightOpen(false);
+    else showPanel(tab);
+  };
+
+  const deleteEntry = async (p) => {
+    await apiRequest('/api/workspace/file', { method: 'DELETE', body: { path: p } });
+    setTabs((prev) => prev.filter((t) => t.path !== p));
+    loadWorkspaceTree(false);
+  };
+
+  const closeTab = (path) => {
+    const next = tabs.filter((x) => x.path !== path);
+    setTabs(next);
+    if (activeTabPath === path) setActiveTabPath(next[next.length - 1]?.path || '');
+  };
+
+  const panelTabs = [
+    { id: 'files', label: 'Files', icon: Folder },
+    { id: 'code', label: 'Code', icon: Code2 },
+    { id: 'preview', label: 'Preview', icon: Eye },
+    { id: 'terminal', label: 'Terminal', icon: Terminal },
+  ];
+
+  const starters = [
+    'Create a playable Brick Breaker game in index.html, style.css, and game.js.',
+    'Build a Python CLI task tracker in task_cli.py and run it to test.',
+    'Make a Three.js 3D terrain generator in index.html with sliders.',
+  ];
+
+  const iconBtn = 'p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer';
+
   return (
-    <div className="flex-1 h-full min-w-0 flex overflow-hidden">
-      {/* 1. LEFT PANE: PC WORKSPACE EXPLORER */}
-      <div
-        className="w-60 h-full border-r flex flex-col shrink-0 select-none"
-        style={{
-          backgroundColor: 'var(--bg-surface-2)',
-          borderColor: 'var(--border-subtle)',
-        }}
-      >
-        <div className="p-3 border-b space-y-2" style={{ borderColor: 'var(--border-subtle)' }}>
-          <div className="flex items-center justify-between gap-1">
-            <span className="text-xs font-semibold uppercase tracking-wider truncate" style={{ color: 'var(--text-muted)' }}>
-              PC Workspace
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={async () => {
-                  const res = await apiRequest('/api/workspace/pick-folder', { method: 'POST' });
-                  if (!res.cancelled) {
-                    setWorkspace(res);
-                    setRootPathInput(res.root);
-                    setTabs([]);
-                    setActiveTabPath('');
-                  }
-                }}
-                title="Browse & open any folder on your PC"
-                className="px-2 py-1 rounded-lg bg-[#D97757] text-white text-[11px] font-medium hover:opacity-90 cursor-pointer flex items-center gap-1"
-              >
-                <FolderOpen size={11} />
-                <span>Browse PC</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setNewEntryModal('project')}
-                title="Scaffold new project folder"
-                className="p-1 rounded-lg border hover:bg-black/5 cursor-pointer"
-                style={{ borderColor: 'var(--border-subtle)' }}
-              >
-                <Plus size={13} />
-              </button>
-            </div>
+    <div className="flex-1 h-full min-w-0 flex overflow-hidden" style={{ backgroundColor: 'var(--bg-canvas)' }}>
+      {/* ───────── CONVERSATION (centered, like Claude Code) ───────── */}
+      <div className="flex-1 min-w-0 h-full flex flex-col">
+        <header
+          className="h-12 px-4 border-b flex items-center justify-between gap-3 shrink-0"
+          style={{ borderColor: 'var(--border-subtle)' }}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Code2 size={16} style={{ color: 'var(--accent-claude)' }} />
+            <span className="text-sm font-medium">Code</span>
+            <span style={{ color: 'var(--text-muted)' }}>/</span>
+            <button
+              type="button"
+              onClick={pickFolder}
+              title={`${workspace.root}\nClick to open another folder`}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[13px] min-w-0 hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              <Folder size={13} className="shrink-0" />
+              <span className="truncate max-w-[220px]">{workspace.name || 'workspace'}</span>
+              <ChevronDown size={12} className="shrink-0" />
+            </button>
           </div>
 
-          {editingRootPath ? (
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                try {
-                  const res = await apiRequest('/api/workspace/set-root', {
-                    method: 'POST',
-                    body: { rootPath: rootPathInput },
-                  });
-                  setWorkspace(res);
-                  setTabs([]);
-                  setEditingRootPath(false);
-                } catch (err) {
-                  alert(err.message);
-                }
-              }}
-              className="flex gap-1"
-            >
-              <input
-                value={rootPathInput}
-                onChange={(e) => setRootPathInput(e.target.value)}
-                autoFocus
-                onBlur={() => setEditingRootPath(false)}
-                className="flex-1 min-w-0 px-2 py-1 rounded-lg border text-[11px] font-mono"
-                style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-strong)' }}
-              />
-            </form>
-          ) : (
-            <div
-              onClick={() => setEditingRootPath(true)}
-              title={`${workspace.root}\nClick to type a custom PC directory path`}
-              className="px-2 py-1.5 rounded-lg border text-[11px] font-mono truncate cursor-pointer hover:border-[#D97757]/60"
-              style={{
-                backgroundColor: 'var(--bg-surface)',
-                borderColor: 'var(--border-subtle)',
-                color: 'var(--text-secondary)',
-              }}
-            >
-              {workspace.root || 'Loading...'}
-            </div>
-          )}
-
-          <div className="flex items-center justify-between pt-0.5">
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setNewEntryName('');
-                  setNewEntryModal('file');
-                }}
-                title="New file"
-                className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
-              >
-                <FilePlus size={13.5} />
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setNewEntryName('');
-                  setNewEntryModal('folder');
-                }}
-                title="New folder"
-                className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
-              >
-                <FolderPlus size={13.5} />
-              </button>
-              <button
-                type="button"
-                onClick={() => loadWorkspaceTree(false)}
-                title="Refresh files on disk"
-                className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
-              >
-                <RefreshCw size={13} />
-              </button>
-              <button
-                type="button"
-                onClick={() => apiRequest('/api/workspace/open-explorer', { method: 'POST' })}
-                title="Reveal in Windows Explorer"
-                className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
-              >
-                <ExternalLink size={13} />
-              </button>
-            </div>
-
+          <div className="flex items-center gap-0.5 shrink-0">
             {workspace.undoStack?.length > 0 && (
               <button
                 type="button"
                 onClick={handleUndo}
                 title={`Undo: ${workspace.undoStack[0]?.actionLabel}`}
-                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium text-[#D97757] hover:bg-[#D97757]/10 cursor-pointer"
+                className="flex items-center gap-1 px-2 py-1 mr-1 rounded-lg text-xs hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
+                style={{ color: 'var(--accent-claude)' }}
               >
-                <Undo2 size={12} />
+                <Undo2 size={13} />
                 <span>Undo</span>
               </button>
             )}
+            {panelTabs.map(({ id, label, icon: Icon }) => {
+              const active = rightOpen && rightTab === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => togglePanel(id)}
+                  title={label}
+                  className={iconBtn}
+                  style={{
+                    backgroundColor: active ? 'var(--accent-claude-soft)' : undefined,
+                    color: active ? 'var(--accent-claude)' : 'var(--text-secondary)',
+                  }}
+                >
+                  <Icon size={15} />
+                </button>
+              );
+            })}
+          </div>
+        </header>
+
+        {/* Transcript */}
+        <div ref={chatScrollRef} className="flex-1 overflow-y-auto">
+          <div className="max-w-3xl mx-auto px-5 py-8 space-y-6">
+            {vibeMessages.length === 0 ? (
+              <div className="pt-[10vh] flex flex-col items-center text-center space-y-5">
+                <ClaudeStarburst size={36} />
+                <h2 className="text-[28px] font-normal" style={{ fontFamily: 'var(--font-serif)' }}>
+                  What should we build?
+                </h2>
+                <p className="text-sm max-w-md" style={{ color: 'var(--text-secondary)' }}>
+                  Claude reads, edits and runs files in{' '}
+                  <code className="text-[12px] px-1.5 py-0.5 rounded-md" style={{ backgroundColor: 'var(--bg-surface-3)' }}>
+                    {workspace.name}
+                  </code>{' '}
+                  on your PC.
+                </p>
+                <div className="w-full max-w-xl space-y-2 pt-2">
+                  {starters.map((starter) => (
+                    <button
+                      key={starter}
+                      type="button"
+                      onClick={() => sendVibePrompt(starter)}
+                      className="w-full text-left px-4 py-3 rounded-xl border text-[13px] transition hover:border-[#D97757]/60 cursor-pointer"
+                      style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}
+                    >
+                      {starter}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              vibeMessages.map((m, mi) => {
+                if (m.hiddenLabel) {
+                  return (
+                    <div
+                      key={m.id}
+                      className="flex items-center gap-1.5 text-xs"
+                      style={{ color: 'var(--text-muted)' }}
+                    >
+                      <Check size={12} style={{ color: 'var(--accent-green)' }} />
+                      <span>{m.hiddenLabel}</span>
+                    </div>
+                  );
+                }
+
+                if (m.role === 'user') {
+                  return (
+                    <div key={m.id} className="flex justify-end">
+                      <div
+                        className="max-w-[85%] rounded-2xl px-4 py-2.5 text-[14px] leading-relaxed whitespace-pre-wrap"
+                        style={{ backgroundColor: 'var(--bg-user-bubble)' }}
+                      >
+                        {m.content}
+                      </div>
+                    </div>
+                  );
+                }
+
+                const isLast = mi === vibeMessages.length - 1;
+                const live = vibeStreaming && isLast;
+                const { parts } = parseVibeResponse(m.content, live);
+                return (
+                  <div key={m.id} className="space-y-3">
+                    {m.thinking && <ThinkingBlock text={m.thinking} live={live && !m.content} />}
+                    {parts.map((p, i) =>
+                      p.kind === 'action' ? (
+                        <ToolRow
+                          key={i}
+                          action={p.action}
+                          status={actionStatuses[`${m.id}_${p.action.index}`]}
+                          autoApply={autoApply}
+                          streaming={live}
+                          onApply={() => applySingleOcAction(m.id, p.action)}
+                          onOpenFile={openFileInTab}
+                        />
+                      ) : (
+                        <div key={i} className="text-[15px]">
+                          <MarkdownRenderer content={p.text} />
+                        </div>
+                      )
+                    )}
+                    {live && parts.length === 0 && !m.thinking && (
+                      <div className="flex items-center gap-2 text-[13px]" style={{ color: 'var(--text-muted)' }}>
+                        <ClaudeStarburst size={16} animated />
+                        <span>Working…</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+            {vibeStreaming && vibeMessages.length > 0 && (
+              <div className="flex items-center gap-2 text-[13px]" style={{ color: 'var(--text-muted)' }}>
+                <ClaudeStarburst size={16} animated />
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-          {workspace.tree?.length === 0 ? (
-            <div className="p-3 text-xs text-center" style={{ color: 'var(--text-muted)' }}>
-              Empty folder. Create a file or ask Claude on the right to build an app!
-            </div>
-          ) : (
-            workspace.tree.map((node) => (
-              <FileTreeItem
-                key={node.path}
-                node={node}
-                activePath={activeTabPath}
-                onOpenFile={openFileInTab}
-                onDeleteEntry={async (p) => {
-                  await apiRequest('/api/workspace/file', { method: 'DELETE', body: { path: p } });
-                  setTabs((prev) => prev.filter((t) => t.path !== p));
-                  loadWorkspaceTree(false);
+        {/* Composer */}
+        <div className="shrink-0 px-5 pb-4 pt-2">
+          <div className="max-w-3xl mx-auto">
+            {lastFailedOutput && (
+              <button
+                type="button"
+                onClick={() =>
+                  sendVibePrompt(
+                    `Command \`${lastFailedOutput.command}\` failed with exit code ${lastFailedOutput.exitCode}:\n\`\`\`\n${lastFailedOutput.output}\n\`\`\`\nPlease inspect the relevant files, fix the root cause on disk, and verify.`
+                  )
+                }
+                className="mb-2 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-white cursor-pointer hover:opacity-90"
+                style={{ backgroundColor: 'var(--accent-claude)' }}
+              >
+                <Wrench size={12} />
+                <span>`{lastFailedOutput.command}` failed — fix with Claude</span>
+              </button>
+            )}
+            <div
+              className="rounded-2xl border p-3"
+              style={{
+                backgroundColor: 'var(--bg-surface)',
+                borderColor: 'var(--border-strong)',
+                boxShadow: 'var(--shadow-composer)',
+              }}
+            >
+              <textarea
+                rows={1}
+                value={vibePrompt}
+                onChange={(e) => {
+                  setVibePrompt(e.target.value);
+                  e.target.style.height = 'auto';
+                  e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
                 }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendVibePrompt();
+                  }
+                }}
+                placeholder="Describe what to build or change…"
+                className="w-full bg-transparent text-[14px] leading-relaxed resize-none focus:outline-none px-1"
+                style={{ minHeight: '28px' }}
               />
-            ))
-          )}
+              <div className="flex items-center justify-between pt-2 gap-2">
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setModeMenuOpen(!modeMenuOpen)}
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
+                    style={{ color: autoApply ? 'var(--accent-claude)' : 'var(--text-secondary)' }}
+                  >
+                    {autoApply ? <Zap size={13} /> : <Shield size={13} />}
+                    <span>{autoApply ? 'Auto-accept edits' : 'Ask permissions'}</span>
+                    <ChevronDown size={11} />
+                  </button>
+                  {modeMenuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setModeMenuOpen(false)} />
+                      <div
+                        className="absolute bottom-full left-0 mb-2 w-64 rounded-xl border p-1 z-20"
+                        style={{
+                          backgroundColor: 'var(--bg-surface)',
+                          borderColor: 'var(--border-subtle)',
+                          boxShadow: 'var(--shadow-popover)',
+                        }}
+                      >
+                        {[
+                          { value: false, icon: Shield, title: 'Ask permissions', desc: 'Claude asks before each edit or command' },
+                          { value: true, icon: Zap, title: 'Auto-accept edits', desc: 'Claude applies changes and runs commands on its own' },
+                        ].map((opt) => (
+                          <button
+                            key={opt.title}
+                            type="button"
+                            onClick={() => {
+                              setAutoApply(opt.value);
+                              setModeMenuOpen(false);
+                            }}
+                            className="w-full flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-left hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
+                          >
+                            <opt.icon size={14} className="mt-0.5 shrink-0" />
+                            <span className="flex-1 min-w-0">
+                              <span className="block text-xs font-medium">{opt.title}</span>
+                              <span className="block text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                                {opt.desc}
+                              </span>
+                            </span>
+                            {autoApply === opt.value && <Check size={13} className="mt-0.5 shrink-0" />}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 min-w-0">
+                  <select
+                    value={`${selectedBackend}::${selectedModel}`}
+                    onChange={(e) => {
+                      const [b, ...rest] = e.target.value.split('::');
+                      onSelectModel?.(b, rest.join('::'));
+                    }}
+                    className="text-xs px-2 py-1 rounded-lg max-w-[200px] truncate cursor-pointer bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus:outline-none"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    <optgroup label="Local Ollama">
+                      {(modelsData?.ollama?.models || []).map((m) => (
+                        <option key={`ol_${m.id}`} value={`ollama::${m.id}`}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="9Router Gateway">
+                      {(modelsData?.nineRouter?.models || []).slice(0, 60).map((m) => (
+                        <option key={`9r_${m.id}`} value={`9router::${m.id}`}>
+                          {m.id}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+
+                  {vibeStreaming ? (
+                    <button
+                      type="button"
+                      onClick={() => vibeAbortRef.current?.abort()}
+                      title="Stop"
+                      className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer shrink-0"
+                      style={{ backgroundColor: 'var(--text-primary)', color: 'var(--bg-canvas)' }}
+                    >
+                      <Square size={11} fill="currentColor" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={!vibePrompt.trim()}
+                      onClick={() => sendVibePrompt()}
+                      title="Send"
+                      className="w-8 h-8 rounded-lg text-white flex items-center justify-center disabled:opacity-35 cursor-pointer shrink-0"
+                      style={{ backgroundColor: 'var(--accent-claude)' }}
+                    >
+                      <ArrowUp size={16} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+            {vibeMessages.length > 0 && (
+              <div className="flex justify-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVibeMessages([]);
+                    setActionStatuses({});
+                  }}
+                  className="text-[11px] hover:underline cursor-pointer"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  New session
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* 2. CENTER PANE: MULTI-TAB CODE EDITOR + LIVE PREVIEW + PC TERMINAL */}
-      <div className="flex-1 min-w-0 h-full flex flex-col border-r" style={{ borderColor: 'var(--border-subtle)' }}>
-        {/* Top Editor & Preview Tabs */}
-        <div
-          className="h-11 px-2 border-b flex items-center justify-between gap-2 overflow-x-auto shrink-0"
+      {/* ───────── SIDE PANEL: files / code / preview / terminal ───────── */}
+      {rightOpen && (
+        <aside
+          className="w-[46%] min-w-[340px] max-w-[760px] h-full flex flex-col border-l shrink-0"
           style={{ backgroundColor: 'var(--bg-surface-2)', borderColor: 'var(--border-subtle)' }}
         >
-          <div className="flex items-center gap-1 min-w-0 overflow-x-auto">
-            {tabs.map((t) => {
-              const dirty = t.content !== t.savedContent;
-              const active = activeTabPath === t.path;
-              return (
-                <div
-                  key={t.path}
-                  onClick={() => setActiveTabPath(t.path)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs cursor-pointer shrink-0 border transition"
-                  style={{
-                    backgroundColor: active ? 'var(--bg-surface)' : 'transparent',
-                    borderColor: active ? 'var(--border-subtle)' : 'transparent',
-                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  }}
-                >
-                  <Code2 size={12} className="text-[#D97757]" />
-                  <span className="max-w-[140px] truncate">{t.path.split('/').pop()}</span>
-                  {dirty && <span className="w-1.5 h-1.5 rounded-full bg-[#D97757]" />}
+          <div
+            className="h-12 px-2 border-b flex items-center justify-between shrink-0"
+            style={{ borderColor: 'var(--border-subtle)' }}
+          >
+            <div className="flex items-center gap-0.5">
+              {panelTabs.map(({ id, label, icon: Icon }) => {
+                const active = rightTab === id;
+                return (
                   <button
+                    key={id}
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const next = tabs.filter((x) => x.path !== t.path);
-                      setTabs(next);
-                      if (activeTabPath === t.path) {
-                        setActiveTabPath(next[next.length - 1]?.path || '__preview__');
+                    onClick={() => setRightTab(id)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer"
+                    style={{
+                      backgroundColor: active ? 'var(--bg-surface)' : 'transparent',
+                      color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      boxShadow: active ? 'var(--shadow-card)' : undefined,
+                    }}
+                  >
+                    <Icon size={13} />
+                    <span>{label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <button type="button" onClick={() => setRightOpen(false)} title="Close panel" className={iconBtn}>
+              <X size={15} />
+            </button>
+          </div>
+
+          {/* Files */}
+          {rightTab === 'files' && (
+            <div className="flex-1 min-h-0 flex flex-col">
+              <div className="px-3 py-2 border-b space-y-2" style={{ borderColor: 'var(--border-subtle)' }}>
+                {editingRootPath ? (
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      try {
+                        const res = await apiRequest('/api/workspace/set-root', {
+                          method: 'POST',
+                          body: { rootPath: rootPathInput },
+                        });
+                        setWorkspace(res);
+                        setTabs([]);
+                        setEditingRootPath(false);
+                      } catch (err) {
+                        alert(err.message);
                       }
                     }}
-                    className="opacity-50 hover:opacity-100 p-0.5 cursor-pointer"
                   >
-                    <X size={11} />
+                    <input
+                      value={rootPathInput}
+                      onChange={(e) => setRootPathInput(e.target.value)}
+                      autoFocus
+                      onBlur={() => setEditingRootPath(false)}
+                      className="w-full px-2 py-1 rounded-lg border text-[11px] font-mono focus:outline-none"
+                      style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-strong)' }}
+                    />
+                  </form>
+                ) : (
+                  <div
+                    onClick={() => setEditingRootPath(true)}
+                    title="Click to type a custom directory path"
+                    className="px-2 py-1 rounded-lg border text-[11px] font-mono truncate cursor-pointer hover:border-[#D97757]/60"
+                    style={{
+                      backgroundColor: 'var(--bg-surface)',
+                      borderColor: 'var(--border-subtle)',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
+                    {workspace.root || 'Loading...'}
+                  </div>
+                )}
+                <div className="flex items-center gap-0.5">
+                  <button type="button" title="New file" className={iconBtn} onClick={() => { setNewEntryName(''); setNewEntryModal('file'); }}>
+                    <FilePlus size={14} />
+                  </button>
+                  <button type="button" title="New folder" className={iconBtn} onClick={() => { setNewEntryName(''); setNewEntryModal('folder'); }}>
+                    <FolderPlus size={14} />
+                  </button>
+                  <button type="button" title="New project" className={iconBtn} onClick={() => { setNewEntryName(''); setNewEntryModal('project'); }}>
+                    <Plus size={14} />
+                  </button>
+                  <button type="button" title="Refresh" className={iconBtn} onClick={() => loadWorkspaceTree(false)}>
+                    <RefreshCw size={13} />
+                  </button>
+                  <button type="button" title="Reveal in Explorer" className={iconBtn} onClick={() => apiRequest('/api/workspace/open-explorer', { method: 'POST' })}>
+                    <ExternalLink size={13} />
+                  </button>
+                  <button type="button" title="Open another folder" className={iconBtn} onClick={pickFolder}>
+                    <FolderOpen size={14} />
                   </button>
                 </div>
-              );
-            })}
-
-            <button
-              type="button"
-              onClick={() => setActiveTabPath('__preview__')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer shrink-0 border"
-              style={{
-                backgroundColor: activeTabPath === '__preview__' ? 'var(--accent-claude)' : 'transparent',
-                borderColor: activeTabPath === '__preview__' ? 'var(--accent-claude)' : 'transparent',
-                color: activeTabPath === '__preview__' ? '#FFF' : 'var(--text-secondary)',
-              }}
-            >
-              <Eye size={13} />
-              <span>Live Preview</span>
-            </button>
-          </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            {activeTab && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => saveTab(activeTab.path)}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-medium hover:bg-black/5 cursor-pointer"
-                  style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}
-                >
-                  <Save size={12} />
-                  <span>Save</span>
-                </button>
-                {(activeTab.runCommand || activeTab.path.endsWith('.html')) && (
-                  <button
-                    type="button"
-                    onClick={handleRunActiveFile}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:opacity-90 cursor-pointer"
-                  >
-                    <Play size={12} fill="currentColor" />
-                    <span>{activeTab.path.endsWith('.html') ? 'Preview' : 'Run File'}</span>
-                  </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+                {workspace.tree?.length === 0 ? (
+                  <div className="p-3 text-xs text-center" style={{ color: 'var(--text-muted)' }}>
+                    Empty folder. Create a file or ask Claude to build something.
+                  </div>
+                ) : (
+                  workspace.tree.map((node) => (
+                    <FileTreeItem
+                      key={node.path}
+                      node={node}
+                      activePath={activeTabPath}
+                      onOpenFile={openFileInTab}
+                      onDeleteEntry={deleteEntry}
+                    />
+                  ))
                 )}
-              </>
-            )}
+              </div>
+            </div>
+          )}
 
-            <button
-              type="button"
-              onClick={() => setTerminalOpen(!terminalOpen)}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs cursor-pointer ${
-                terminalOpen ? 'border-[#D97757] text-[#D97757]' : ''
-              }`}
-              style={{ borderColor: terminalOpen ? '#D97757' : 'var(--border-subtle)' }}
-            >
-              <Terminal size={12} />
-              <span>Terminal</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Main Editor or Live Preview Canvas */}
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          {activeTabPath === '__preview__' ? (
-            <div className="flex-1 flex flex-col bg-white">
+          {/* Code */}
+          {rightTab === 'code' && (
+            <div className="flex-1 min-h-0 flex flex-col">
               <div
-                className="flex items-center gap-2 px-3 py-1.5 border-b text-xs"
-                style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}
+                className="h-10 px-2 border-b flex items-center justify-between gap-2 shrink-0"
+                style={{ borderColor: 'var(--border-subtle)' }}
               >
-                <span className="font-medium shrink-0" style={{ color: 'var(--text-muted)' }}>Preview target:</span>
+                <div className="flex items-center gap-1 min-w-0 overflow-x-auto">
+                  {tabs.map((t) => {
+                    const dirty = t.content !== t.savedContent;
+                    const active = activeTabPath === t.path;
+                    return (
+                      <div
+                        key={t.path}
+                        onClick={() => setActiveTabPath(t.path)}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs cursor-pointer shrink-0"
+                        style={{
+                          backgroundColor: active ? 'var(--bg-surface)' : 'transparent',
+                          color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                        }}
+                      >
+                        <span className="max-w-[130px] truncate">{t.path.split('/').pop()}</span>
+                        {dirty && <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--accent-claude)' }} />}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            closeTab(t.path);
+                          }}
+                          className="opacity-50 hover:opacity-100 cursor-pointer"
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                {activeTab && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => saveTab(activeTab.path)}
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
+                    >
+                      <Save size={12} />
+                      <span>Save</span>
+                    </button>
+                    {(activeTab.runCommand || activeTab.path.endsWith('.html')) && (
+                      <button
+                        type="button"
+                        onClick={handleRunActiveFile}
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-white cursor-pointer hover:opacity-90"
+                        style={{ backgroundColor: 'var(--accent-claude)' }}
+                      >
+                        <Play size={11} fill="currentColor" />
+                        <span>{activeTab.path.endsWith('.html') ? 'Preview' : 'Run'}</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {activeTab ? (
+                <div className="flex-1 min-h-0 flex overflow-hidden" style={{ backgroundColor: 'var(--bg-code)' }}>
+                  <div
+                    ref={gutterRef}
+                    className="py-4 px-3 text-right font-mono text-[12px] leading-[1.6] select-none overflow-hidden shrink-0"
+                    style={{ color: '#6E6B62' }}
+                  >
+                    {activeTab.content.split('\n').map((_, idx) => (
+                      <div key={idx}>{idx + 1}</div>
+                    ))}
+                  </div>
+                  <textarea
+                    value={activeTab.content}
+                    onScroll={(e) => {
+                      if (gutterRef.current) gutterRef.current.scrollTop = e.target.scrollTop;
+                    }}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTabs((prev) => prev.map((t) => (t.path === activeTab.path ? { ...t, content: val } : t)));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Tab') {
+                        e.preventDefault();
+                        const start = e.target.selectionStart;
+                        const end = e.target.selectionEnd;
+                        const updated = activeTab.content.substring(0, start) + '  ' + activeTab.content.substring(end);
+                        setTabs((prev) => prev.map((t) => (t.path === activeTab.path ? { ...t, content: updated } : t)));
+                        requestAnimationFrame(() => {
+                          e.target.selectionStart = e.target.selectionEnd = start + 2;
+                        });
+                      }
+                    }}
+                    spellCheck={false}
+                    wrap="off"
+                    className="flex-1 p-4 bg-transparent text-[#F2F0E8] font-mono text-[13px] leading-[1.6] resize-none focus:outline-none overflow-auto"
+                  />
+                </div>
+              ) : (
+                <div className="flex-1 flex items-center justify-center text-xs" style={{ color: 'var(--text-muted)' }}>
+                  Open a file from the Files tab or click one in the transcript.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Preview */}
+          {rightTab === 'preview' && (
+            <div className="flex-1 min-h-0 flex flex-col">
+              <div
+                className="flex items-center gap-2 px-3 py-2 border-b text-xs shrink-0"
+                style={{ borderColor: 'var(--border-subtle)' }}
+              >
                 <input
                   value={customPreviewUrl || previewEntry}
                   onChange={(e) => {
@@ -858,24 +1387,13 @@ export default function VibeCodingStudio({
                     }
                   }}
                   placeholder="index.html or http://localhost:5173"
-                  className="flex-1 px-2.5 py-1 rounded-lg border font-mono text-xs focus:outline-none"
-                  style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-subtle)' }}
+                  className="flex-1 min-w-0 px-2.5 py-1 rounded-lg border font-mono text-xs focus:outline-none"
+                  style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}
                 />
-                <button
-                  type="button"
-                  onClick={() => setPreviewNonce((n) => n + 1)}
-                  className="p-1.5 rounded-lg hover:bg-black/5 cursor-pointer"
-                  title="Reload preview"
-                >
+                <button type="button" onClick={() => setPreviewNonce((n) => n + 1)} className={iconBtn} title="Reload">
                   <RotateCcw size={13} />
                 </button>
-                <a
-                  href={effectivePreviewSrc}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-1.5 rounded-lg hover:bg-black/5"
-                  title="Open in browser tab"
-                >
+                <a href={effectivePreviewSrc} target="_blank" rel="noopener noreferrer" className={iconBtn} title="Open in browser">
                   <ExternalLink size={13} />
                 </a>
               </div>
@@ -886,397 +1404,84 @@ export default function VibeCodingStudio({
                 className="flex-1 w-full border-0 bg-white"
               />
             </div>
-          ) : activeTab ? (
-            <div className="flex-1 min-h-0 flex overflow-hidden" style={{ backgroundColor: '#181715' }}>
-              <div
-                className="py-4 px-3 text-right font-mono text-[12px] leading-[1.6] select-none overflow-hidden shrink-0"
-                style={{ color: '#6E6B62', backgroundColor: '#141312' }}
-              >
-                {activeTab.content.split('\n').map((_, idx) => (
-                  <div key={idx}>{idx + 1}</div>
-                ))}
-              </div>
-              <textarea
-                value={activeTab.content}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setTabs((prev) =>
-                    prev.map((t) => (t.path === activeTab.path ? { ...t, content: val } : t))
-                  );
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Tab') {
-                    e.preventDefault();
-                    const start = e.target.selectionStart;
-                    const end = e.target.selectionEnd;
-                    const updated =
-                      activeTab.content.substring(0, start) + '  ' + activeTab.content.substring(end);
-                    setTabs((prev) =>
-                      prev.map((t) => (t.path === activeTab.path ? { ...t, content: updated } : t))
-                    );
-                    requestAnimationFrame(() => {
-                      e.target.selectionStart = e.target.selectionEnd = start + 2;
-                    });
-                  }
-                }}
-                spellCheck={false}
-                className="flex-1 p-4 bg-transparent text-[#F2F0E8] font-mono text-[13px] leading-[1.6] resize-none focus:outline-none overflow-auto"
-              />
-            </div>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-3">
-              <ClaudeStarburst size={32} />
-              <h3 className="text-xl font-normal" style={{ fontFamily: 'var(--font-serif)' }}>
-                OpenClaude Vibe Coding Studio
-              </h3>
-              <p className="text-xs max-w-md leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                Select a file on the left, scaffold a new app, or describe what you want to build in the Vibe Agent pane on the right—Claude will create, edit, and run files directly on your PC.
-              </p>
-            </div>
           )}
-        </div>
 
-        {/* Bottom Integrated Streaming PC Terminal */}
-        {terminalOpen && (
-          <div
-            className="h-52 border-t flex flex-col shrink-0"
-            style={{ backgroundColor: '#131211', borderColor: 'var(--border-subtle)' }}
-          >
-            <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/10 text-[11px] text-[#A8A59C]">
-              <div className="flex items-center gap-2">
-                <Terminal size={12} className="text-[#D97757]" />
-                <span className="font-mono truncate max-w-xs">{workspace.root}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                {lastFailedOutput && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      sendVibePrompt(
-                        `Command \`${lastFailedOutput.command}\` failed with exit code ${lastFailedOutput.exitCode}:\n\`\`\`\n${lastFailedOutput.output}\n\`\`\`\nPlease inspect the relevant files, fix the root cause on disk, and verify.`
-                      )
-                    }
-                    className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#D97757] text-white font-medium cursor-pointer"
-                  >
-                    <Wrench size={11} />
-                    <span>Fix Error with Claude</span>
+          {/* Terminal */}
+          {rightTab === 'terminal' && (
+            <div className="flex-1 min-h-0 flex flex-col" style={{ backgroundColor: '#131211' }}>
+              <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/10 text-[11px] text-[#A8A59C]">
+                <span className="font-mono truncate">{workspace.root}</span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {isExecRunning && (
+                    <button
+                      type="button"
+                      onClick={() => execAbortRef.current?.abort()}
+                      className="flex items-center gap-1 px-2 py-0.5 rounded bg-red-600 text-white cursor-pointer"
+                    >
+                      <Square size={10} fill="currentColor" />
+                      <span>Kill</span>
+                    </button>
+                  )}
+                  <button type="button" onClick={() => setTerminalLogs([])} className="px-2 py-0.5 rounded hover:bg-white/10 cursor-pointer">
+                    Clear
                   </button>
-                )}
-                {isExecRunning && (
-                  <button
-                    type="button"
-                    onClick={() => execAbortRef.current?.abort()}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded bg-red-600 text-white cursor-pointer"
-                  >
-                    <Square size={10} fill="currentColor" />
-                    <span>Kill</span>
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setTerminalLogs([])}
-                  className="px-2 py-0.5 rounded hover:bg-white/10 cursor-pointer"
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-
-            <div
-              ref={termScrollRef}
-              className="flex-1 overflow-y-auto px-3 py-2 font-mono text-[12px] leading-relaxed whitespace-pre-wrap"
-            >
-              {terminalLogs.map((l, i) => (
-                <span
-                  key={i}
-                  className={
-                    l.kind === 'cmd'
-                      ? 'text-[#F2B880] font-semibold'
-                      : l.kind === 'stderr' || l.kind === 'exit-err'
-                      ? 'text-red-400'
-                      : l.kind === 'exit-ok'
-                      ? 'text-emerald-400'
-                      : 'text-[#E6E4DC]'
-                  }
-                >
-                  {l.text}
-                </span>
-              ))}
-            </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!terminalCmd.trim()) return;
-                const c = terminalCmd;
-                setTerminalCmd('');
-                runCommandOnPc(c);
-              }}
-              className="flex items-center gap-2 px-3 py-1.5 border-t border-white/10 bg-[#1B1A18]"
-            >
-              <span className="text-xs font-mono text-[#D97757] font-bold">❯</span>
-              <input
-                value={terminalCmd}
-                onChange={(e) => setTerminalCmd(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'ArrowUp' && cmdHistory.length > 0) {
-                    e.preventDefault();
-                    const next = Math.min(historyIdx + 1, cmdHistory.length - 1);
-                    setHistoryIdx(next);
-                    setTerminalCmd(cmdHistory[next]);
-                  } else if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    const next = historyIdx - 1;
-                    setHistoryIdx(next);
-                    setTerminalCmd(next >= 0 ? cmdHistory[next] : '');
-                  }
-                }}
-                placeholder="Run any command on PC (node, python, npm, git, dir)..."
-                className="flex-1 bg-transparent text-xs font-mono text-[#F2F0E8] focus:outline-none"
-              />
-              <button
-                type="submit"
-                className="px-2.5 py-1 rounded bg-[#D97757] text-white text-[11px] font-medium cursor-pointer"
-              >
-                Run
-              </button>
-            </form>
-          </div>
-        )}
-      </div>
-
-      {/* 3. RIGHT PANE: AUTONOMOUS CLAUDE VIBE CODING COPILOT */}
-      <div
-        className="w-[370px] xl:w-[410px] h-full flex flex-col shrink-0"
-        style={{ backgroundColor: 'var(--bg-canvas)' }}
-      >
-        <div
-          className="px-4 py-2.5 border-b flex items-center justify-between gap-2 shrink-0"
-          style={{ backgroundColor: 'var(--bg-surface-2)', borderColor: 'var(--border-subtle)' }}
-        >
-          <div className="flex items-center gap-2">
-            <ClaudeStarburst size={19} animated={vibeStreaming} />
-            <div>
-              <div className="text-xs font-semibold">Vibe Coding Agent</div>
-              <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                Reads, writes & runs files on your PC
-              </div>
-            </div>
-          </div>
-
-          <label className="flex items-center gap-1.5 text-[11px] font-medium cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={autoApply}
-              onChange={(e) => setAutoApply(e.target.checked)}
-              className="accent-[#D97757] cursor-pointer"
-            />
-            <span>Auto-apply</span>
-          </label>
-        </div>
-
-        {/* Agent Conversation Feed */}
-        <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-3.5 space-y-4">
-          {vibeMessages.length === 0 ? (
-            <div className="space-y-3 pt-4">
-              <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                Describe an app, feature, script, or bugfix. Claude will directly create and edit files inside{' '}
-                <code className="text-[11px] px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10">
-                  {workspace.name}
-                </code>{' '}
-                and update the Live Preview.
-              </p>
-              <div className="space-y-1.5">
-                {[
-                  'Create a complete playable Neon Synthwave Brick Breaker game in index.html, style.css, and game.js.',
-                  'Build a clean Python CLI task tracker in task_cli.py and run it to test.',
-                  'Create a Three.js interactive 3D terrain generator in index.html with sliders for elevation and wireframe.',
-                ].map((starter, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => sendVibePrompt(starter)}
-                    className="w-full text-left p-2.5 rounded-xl border text-xs hover:border-[#D97757]/60 transition cursor-pointer"
-                    style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}
-                  >
-                    {starter}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            vibeMessages.map((m) => {
-              if (m.hiddenLabel) {
-                return (
-                  <div
-                    key={m.id}
-                    className="text-[11px] px-3 py-1.5 rounded-xl border flex items-center gap-1.5"
-                    style={{
-                      backgroundColor: 'var(--bg-surface-2)',
-                      borderColor: 'var(--border-subtle)',
-                      color: 'var(--text-muted)',
-                    }}
-                  >
-                    <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
-                    <span>{m.hiddenLabel}</span>
-                  </div>
-                );
-              }
-
-              if (m.role === 'user') {
-                return (
-                  <div
-                    key={m.id}
-                    className="ml-6 rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed whitespace-pre-wrap"
-                    style={{ backgroundColor: 'var(--bg-user-bubble)' }}
-                  >
-                    {m.content}
-                  </div>
-                );
-              }
-
-              const { parts } = parseVibeResponse(m.content, vibeStreaming);
-              return (
-                <div key={m.id} className="space-y-2 text-xs">
-                  {parts.map((p, i) => {
-                    if (p.kind === 'action') {
-                      const act = p.action;
-                      const st = actionStatuses[`${m.id}_${act.index}`];
-                      return (
-                        <div
-                          key={i}
-                          className="rounded-xl border p-2.5 space-y-1.5"
-                          style={{
-                            backgroundColor: 'var(--bg-surface)',
-                            borderColor: 'var(--border-subtle)',
-                          }}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-mono font-semibold text-[11px] truncate text-[#D97757]">
-                              {act.type}: {act.path || act.body.slice(0, 36)}
-                            </span>
-                            {st?.status === 'done' ? (
-                              <span className="text-[10px] text-emerald-600 font-medium flex items-center gap-1 shrink-0">
-                                <CheckCircle2 size={11} /> {st.detail}
-                              </span>
-                            ) : st?.status === 'error' ? (
-                              <span className="text-[10px] text-red-500 font-medium flex items-center gap-1 shrink-0">
-                                <AlertTriangle size={11} /> Failed
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => applySingleOcAction(m.id, act)}
-                                className="px-2 py-0.5 rounded bg-[#D97757] text-white text-[10px] font-medium cursor-pointer"
-                              >
-                                Apply
-                              </button>
-                            )}
-                          </div>
-                          {act.path && act.type !== 'run_command' && (
-                            <button
-                              type="button"
-                              onClick={() => openFileInTab(act.path)}
-                              className="text-[11px] underline opacity-75 hover:opacity-100 cursor-pointer"
-                            >
-                              Open in editor →
-                            </button>
-                          )}
-                        </div>
-                      );
-                    }
-                    return (
-                      <div key={i} className="text-xs">
-                        <MarkdownRenderer content={p.text} />
-                      </div>
-                    );
-                  })}
                 </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* Vibe Agent Input Box */}
-        <div className="p-3 border-t space-y-2 shrink-0" style={{ borderColor: 'var(--border-subtle)' }}>
-          <div
-            className="rounded-2xl border p-2.5"
-            style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-strong)' }}
-          >
-            <textarea
-              rows={2}
-              value={vibePrompt}
-              onChange={(e) => setVibePrompt(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
+              </div>
+              <div ref={termScrollRef} className="flex-1 overflow-y-auto px-3 py-2 font-mono text-[12px] leading-relaxed whitespace-pre-wrap">
+                {terminalLogs.map((l, i) => (
+                  <span
+                    key={i}
+                    className={
+                      l.kind === 'cmd'
+                        ? 'text-[#F2B880] font-semibold'
+                        : l.kind === 'stderr' || l.kind === 'exit-err'
+                        ? 'text-red-400'
+                        : l.kind === 'exit-ok'
+                        ? 'text-emerald-400'
+                        : 'text-[#E6E4DC]'
+                    }
+                  >
+                    {l.text}
+                  </span>
+                ))}
+              </div>
+              <form
+                onSubmit={(e) => {
                   e.preventDefault();
-                  sendVibePrompt();
-                }
-              }}
-              placeholder="Ask Claude to create, edit, or run files on your PC..."
-              className="w-full bg-transparent text-xs leading-relaxed resize-none focus:outline-none"
-            />
-            <div className="flex items-center justify-between pt-1.5">
-              <select
-                value={`${selectedBackend}::${selectedModel}`}
-                onChange={(e) => {
-                  const [b, ...rest] = e.target.value.split('::');
-                  onSelectModel?.(b, rest.join('::'));
+                  if (!terminalCmd.trim()) return;
+                  const c = terminalCmd;
+                  setTerminalCmd('');
+                  runCommandOnPc(c);
                 }}
-                className="text-[11px] px-2 py-1 rounded-lg border max-w-[220px] truncate cursor-pointer"
-                style={{ backgroundColor: 'var(--bg-canvas)', borderColor: 'var(--border-subtle)' }}
+                className="flex items-center gap-2 px-3 py-2 border-t border-white/10 bg-[#1B1A18]"
               >
-                <optgroup label="Local Ollama">
-                  {(modelsData?.ollama?.models || []).map((m) => (
-                    <option key={`ol_${m.id}`} value={`ollama::${m.id}`}>
-                      Ollama: {m.name}
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="9Router Gateway">
-                  {(modelsData?.nineRouter?.models || []).slice(0, 60).map((m) => (
-                    <option key={`9r_${m.id}`} value={`9router::${m.id}`}>
-                      9Router: {m.id}
-                    </option>
-                  ))}
-                </optgroup>
-              </select>
-
-              {vibeStreaming ? (
-                <button
-                  type="button"
-                  onClick={() => vibeAbortRef.current?.abort()}
-                  className="w-7 h-7 rounded-xl bg-[#141413] dark:bg-[#F2F0E8] text-white dark:text-[#141413] flex items-center justify-center cursor-pointer"
-                >
-                  <Square size={11} fill="currentColor" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={!vibePrompt.trim()}
-                  onClick={() => sendVibePrompt()}
-                  className="w-7 h-7 rounded-xl bg-[#D97757] text-white flex items-center justify-center disabled:opacity-35 cursor-pointer"
-                >
-                  <ArrowUp size={15} />
-                </button>
-              )}
+                <span className="text-xs font-mono text-[#D97757] font-bold">❯</span>
+                <input
+                  value={terminalCmd}
+                  onChange={(e) => setTerminalCmd(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowUp' && cmdHistory.length > 0) {
+                      e.preventDefault();
+                      const next = Math.min(historyIdx + 1, cmdHistory.length - 1);
+                      setHistoryIdx(next);
+                      setTerminalCmd(cmdHistory[next]);
+                    } else if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      const next = historyIdx - 1;
+                      setHistoryIdx(next);
+                      setTerminalCmd(next >= 0 ? cmdHistory[next] : '');
+                    }
+                  }}
+                  placeholder="Run any command (node, python, npm, git, dir)…"
+                  className="flex-1 bg-transparent text-xs font-mono text-[#F2F0E8] focus:outline-none"
+                />
+              </form>
             </div>
-          </div>
-
-          {vibeMessages.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setVibeMessages([])}
-              className="text-[11px] hover:underline cursor-pointer"
-              style={{ color: 'var(--text-muted)' }}
-            >
-              Clear agent session
-            </button>
           )}
-        </div>
-      </div>
+        </aside>
+      )}
 
-      {/* Modal for New File / New Folder / Scaffold Project */}
+      {/* New File / Folder / Project modal */}
       {newEntryModal && (
         <div
           onClick={() => setNewEntryModal(null)}
@@ -1318,10 +1523,10 @@ export default function VibeCodingStudio({
           >
             <h3 className="font-semibold text-sm">
               {newEntryModal === 'file'
-                ? 'Create New File on PC'
+                ? 'Create New File'
                 : newEntryModal === 'folder'
-                ? 'Create New Folder on PC'
-                : 'Scaffold New Vibe Project'}
+                ? 'Create New Folder'
+                : 'Scaffold New Project'}
             </h3>
             <input
               value={newEntryName}
@@ -1369,7 +1574,8 @@ export default function VibeCodingStudio({
               </button>
               <button
                 type="submit"
-                className="px-3.5 py-1.5 rounded-xl bg-[#D97757] text-white text-xs font-medium cursor-pointer"
+                className="px-3.5 py-1.5 rounded-xl text-white text-xs font-medium cursor-pointer"
+                style={{ backgroundColor: 'var(--accent-claude)' }}
               >
                 Create
               </button>
