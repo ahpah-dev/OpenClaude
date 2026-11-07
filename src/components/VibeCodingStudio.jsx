@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import hljs from 'highlight.js';
 import {
   FolderOpen,
   FilePlus,
@@ -30,6 +31,7 @@ import {
   Brain,
   Shield,
   Zap,
+  PanelRight,
 } from 'lucide-react';
 import { ClaudeStarburst } from './ClaudeIcons.jsx';
 import MarkdownRenderer from './MarkdownRenderer.jsx';
@@ -151,7 +153,7 @@ function DiffLines({ lines, sign }) {
 }
 
 // One compact, collapsible tool-call row — the way Claude Code lists Edit / Write / Read / Bash steps.
-function ToolRow({ action, status, autoApply, streaming, onApply, onOpenFile }) {
+function ToolRow({ action, status, autoApply, streaming, first, onApply, onOpenFile }) {
   const [open, setOpen] = useState(false);
   const meta = TOOL_META[action.type] || TOOL_META.write_file;
   const Icon = meta.icon;
@@ -174,8 +176,8 @@ function ToolRow({ action, status, autoApply, streaming, onApply, onOpenFile }) 
 
   return (
     <div
-      className="rounded-xl border overflow-hidden text-[13px]"
-      style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}
+      className="text-[13px]"
+      style={first ? undefined : { borderTop: '1px solid var(--border-subtle)' }}
     >
       <div
         onClick={() => expandable && setOpen(!open)}
@@ -265,6 +267,170 @@ function ToolRow({ action, status, autoApply, streaming, onApply, onOpenFile }) 
   );
 }
 
+const EXT_LANG = {
+  js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript', ts: 'typescript', tsx: 'typescript',
+  html: 'xml', htm: 'xml', xml: 'xml', svg: 'xml', css: 'css', json: 'json', py: 'python', md: 'markdown',
+  sh: 'bash', bat: 'dos', ps1: 'powershell', java: 'java', c: 'c', cpp: 'cpp', cs: 'csharp', go: 'go',
+  rs: 'rust', rb: 'ruby', php: 'php', yml: 'yaml', yaml: 'yaml', sql: 'sql',
+};
+
+const escapeHtml = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// Textarea layered over a syntax-highlighted <pre> so editing stays native but code is coloured.
+function CodeEditor({ path, value, onChange }) {
+  const [scroll, setScroll] = useState({ top: 0, left: 0 });
+  const lang = EXT_LANG[path.split('.').pop().toLowerCase()];
+  const html = useMemo(() => {
+    if (lang && value.length < 200000 && hljs.getLanguage(lang)) {
+      try {
+        return hljs.highlight(value, { language: lang, ignoreIllegals: true }).value;
+      } catch {
+        /* fall through to plain text */
+      }
+    }
+    return escapeHtml(value);
+  }, [value, lang]);
+  const lineCount = value.split('\n').length;
+  const metrics = { fontFamily: 'var(--font-mono)', fontSize: '13px', lineHeight: '20px', tabSize: 2 };
+
+  return (
+    <div className="flex-1 min-h-0 flex overflow-hidden" style={{ backgroundColor: 'var(--bg-code)' }}>
+      <div
+        className="shrink-0 overflow-hidden select-none text-right border-r"
+        style={{ borderColor: 'rgba(255,255,255,0.06)', backgroundColor: 'rgba(0,0,0,0.12)' }}
+      >
+        <div style={{ ...metrics, padding: '16px 12px', color: '#6E6B62', transform: `translateY(${-scroll.top}px)` }}>
+          {Array.from({ length: lineCount }, (_, i) => (
+            <div key={i}>{i + 1}</div>
+          ))}
+        </div>
+      </div>
+      <div className="relative flex-1 min-w-0 overflow-hidden">
+        <pre
+          aria-hidden="true"
+          className="absolute top-0 left-0 m-0 pointer-events-none"
+          style={{
+            ...metrics,
+            padding: '16px',
+            whiteSpace: 'pre',
+            color: '#E6E4DC',
+            transform: `translate(${-scroll.left}px, ${-scroll.top}px)`,
+          }}
+        >
+          <code className="hljs" style={{ font: 'inherit' }} dangerouslySetInnerHTML={{ __html: html + '\n' }} />
+        </pre>
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onScroll={(e) => setScroll({ top: e.target.scrollTop, left: e.target.scrollLeft })}
+          onKeyDown={(e) => {
+            if (e.key === 'Tab') {
+              e.preventDefault();
+              const start = e.target.selectionStart;
+              const end = e.target.selectionEnd;
+              onChange(value.substring(0, start) + '  ' + value.substring(end));
+              requestAnimationFrame(() => {
+                e.target.selectionStart = e.target.selectionEnd = start + 2;
+              });
+            }
+          }}
+          spellCheck={false}
+          wrap="off"
+          className="absolute inset-0 w-full h-full resize-none focus:outline-none overflow-auto bg-transparent"
+          style={{ ...metrics, padding: '16px', whiteSpace: 'pre', color: 'transparent', caretColor: '#F2F0E8' }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// Merge consecutive <ocAction> parts so a burst of tool calls renders as one card.
+function groupParts(parts) {
+  const out = [];
+  for (const p of parts) {
+    if (p.kind === 'action') {
+      const last = out[out.length - 1];
+      if (last?.kind === 'actions') last.items.push(p.action);
+      else out.push({ kind: 'actions', items: [p.action] });
+    } else {
+      out.push({ kind: 'prose', text: p.text });
+    }
+  }
+  return out;
+}
+
+function ModelPicker({ selectedBackend, selectedModel, modelsData, onSelectModel }) {
+  const [open, setOpen] = useState(false);
+  const groups = [
+    {
+      label: 'Local Ollama',
+      backend: 'ollama',
+      items: (modelsData?.ollama?.models || []).map((m) => ({ id: m.id, name: m.name || m.id })),
+    },
+    {
+      label: '9Router Gateway',
+      backend: '9router',
+      items: (modelsData?.nineRouter?.models || []).slice(0, 60).map((m) => ({ id: m.id, name: m.id })),
+    },
+  ].filter((g) => g.items.length > 0);
+  const current = groups.flatMap((g) => g.items).find((m) => m.id === selectedModel);
+
+  return (
+    <div className="relative min-w-0">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer max-w-[200px]"
+        style={{ color: 'var(--text-secondary)' }}
+      >
+        <span className="truncate">{current?.name || selectedModel || 'Select model'}</span>
+        <ChevronDown size={11} className="shrink-0" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div
+            className="absolute bottom-full right-0 mb-2 w-72 max-h-80 overflow-y-auto rounded-xl border p-1 z-20"
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              borderColor: 'var(--border-subtle)',
+              boxShadow: 'var(--shadow-popover)',
+            }}
+          >
+            {groups.map((g) => (
+              <div key={g.backend}>
+                <div
+                  className="px-2.5 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  {g.label}
+                </div>
+                {g.items.map((m) => {
+                  const active = selectedBackend === g.backend && selectedModel === m.id;
+                  return (
+                    <button
+                      key={`${g.backend}_${m.id}`}
+                      type="button"
+                      onClick={() => {
+                        onSelectModel?.(g.backend, m.id);
+                        setOpen(false);
+                      }}
+                      className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs text-left hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
+                    >
+                      <span className="truncate">{m.name}</span>
+                      {active && <Check size={13} className="shrink-0" style={{ color: 'var(--accent-claude)' }} />}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function ThinkingBlock({ text, live }) {
   const [open, setOpen] = useState(false);
   return (
@@ -309,7 +475,6 @@ export default function VibeCodingStudio({
   const [rightOpen, setRightOpen] = useState(false);
   const [rightTab, setRightTab] = useState('files');
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
-  const gutterRef = useRef(null);
 
   const showPanel = (tab) => {
     setRightTab(tab);
@@ -367,7 +532,7 @@ export default function VibeCodingStudio({
           return null;
         };
         const first = findFirstFile(data.tree);
-        if (first) openFileInTab(first);
+        if (first) openFileInTab(first, false);
       }
       return data;
     } catch (err) {
@@ -786,11 +951,6 @@ export default function VibeCodingStudio({
     }
   };
 
-  const togglePanel = (tab) => {
-    if (rightOpen && rightTab === tab) setRightOpen(false);
-    else showPanel(tab);
-  };
-
   const deleteEntry = async (p) => {
     await apiRequest('/api/workspace/file', { method: 'DELETE', body: { path: p } });
     setTabs((prev) => prev.filter((t) => t.path !== p));
@@ -844,6 +1004,21 @@ export default function VibeCodingStudio({
           </div>
 
           <div className="flex items-center gap-0.5 shrink-0">
+            {vibeMessages.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  vibeAbortRef.current?.abort();
+                  setVibeMessages([]);
+                  setActionStatuses({});
+                }}
+                className="flex items-center gap-1 px-2 py-1 mr-1 rounded-lg text-xs hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                <Plus size={13} />
+                <span>New session</span>
+              </button>
+            )}
             {workspace.undoStack?.length > 0 && (
               <button
                 type="button"
@@ -856,24 +1031,18 @@ export default function VibeCodingStudio({
                 <span>Undo</span>
               </button>
             )}
-            {panelTabs.map(({ id, label, icon: Icon }) => {
-              const active = rightOpen && rightTab === id;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => togglePanel(id)}
-                  title={label}
-                  className={iconBtn}
-                  style={{
-                    backgroundColor: active ? 'var(--accent-claude-soft)' : undefined,
-                    color: active ? 'var(--accent-claude)' : 'var(--text-secondary)',
-                  }}
-                >
-                  <Icon size={15} />
-                </button>
-              );
-            })}
+            <button
+              type="button"
+              onClick={() => setRightOpen(!rightOpen)}
+              title={rightOpen ? 'Hide workspace panel' : 'Show workspace panel'}
+              className={iconBtn}
+              style={{
+                backgroundColor: rightOpen ? 'var(--accent-claude-soft)' : undefined,
+                color: rightOpen ? 'var(--accent-claude)' : 'var(--text-secondary)',
+              }}
+            >
+              <PanelRight size={16} />
+            </button>
           </div>
         </header>
 
@@ -909,18 +1078,7 @@ export default function VibeCodingStudio({
               </div>
             ) : (
               vibeMessages.map((m, mi) => {
-                if (m.hiddenLabel) {
-                  return (
-                    <div
-                      key={m.id}
-                      className="flex items-center gap-1.5 text-xs"
-                      style={{ color: 'var(--text-muted)' }}
-                    >
-                      <Check size={12} style={{ color: 'var(--accent-green)' }} />
-                      <span>{m.hiddenLabel}</span>
-                    </div>
-                  );
-                }
+                if (m.hiddenLabel) return null;
 
                 if (m.role === 'user') {
                   return (
@@ -941,20 +1099,29 @@ export default function VibeCodingStudio({
                 return (
                   <div key={m.id} className="space-y-3">
                     {m.thinking && <ThinkingBlock text={m.thinking} live={live && !m.content} />}
-                    {parts.map((p, i) =>
-                      p.kind === 'action' ? (
-                        <ToolRow
-                          key={i}
-                          action={p.action}
-                          status={actionStatuses[`${m.id}_${p.action.index}`]}
-                          autoApply={autoApply}
-                          streaming={live}
-                          onApply={() => applySingleOcAction(m.id, p.action)}
-                          onOpenFile={openFileInTab}
-                        />
+                    {groupParts(parts).map((g, gi) =>
+                      g.kind === 'actions' ? (
+                        <div
+                          key={gi}
+                          className="rounded-xl border overflow-hidden"
+                          style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}
+                        >
+                          {g.items.map((act, ai) => (
+                            <ToolRow
+                              key={act.index}
+                              first={ai === 0}
+                              action={act}
+                              status={actionStatuses[`${m.id}_${act.index}`]}
+                              autoApply={autoApply}
+                              streaming={live}
+                              onApply={() => applySingleOcAction(m.id, act)}
+                              onOpenFile={openFileInTab}
+                            />
+                          ))}
+                        </div>
                       ) : (
-                        <div key={i} className="text-[15px]">
-                          <MarkdownRenderer content={p.text} />
+                        <div key={gi} className="text-[15px]">
+                          <MarkdownRenderer content={g.text} />
                         </div>
                       )
                     )}
@@ -968,7 +1135,7 @@ export default function VibeCodingStudio({
                 );
               })
             )}
-            {vibeStreaming && vibeMessages.length > 0 && (
+            {vibeStreaming && vibeMessages[vibeMessages.length - 1]?.content && (
               <div className="flex items-center gap-2 text-[13px]" style={{ color: 'var(--text-muted)' }}>
                 <ClaudeStarburst size={16} animated />
               </div>
@@ -1072,30 +1239,12 @@ export default function VibeCodingStudio({
                 </div>
 
                 <div className="flex items-center gap-2 min-w-0">
-                  <select
-                    value={`${selectedBackend}::${selectedModel}`}
-                    onChange={(e) => {
-                      const [b, ...rest] = e.target.value.split('::');
-                      onSelectModel?.(b, rest.join('::'));
-                    }}
-                    className="text-xs px-2 py-1 rounded-lg max-w-[200px] truncate cursor-pointer bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus:outline-none"
-                    style={{ color: 'var(--text-secondary)' }}
-                  >
-                    <optgroup label="Local Ollama">
-                      {(modelsData?.ollama?.models || []).map((m) => (
-                        <option key={`ol_${m.id}`} value={`ollama::${m.id}`}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="9Router Gateway">
-                      {(modelsData?.nineRouter?.models || []).slice(0, 60).map((m) => (
-                        <option key={`9r_${m.id}`} value={`9router::${m.id}`}>
-                          {m.id}
-                        </option>
-                      ))}
-                    </optgroup>
-                  </select>
+                  <ModelPicker
+                    selectedBackend={selectedBackend}
+                    selectedModel={selectedModel}
+                    modelsData={modelsData}
+                    onSelectModel={onSelectModel}
+                  />
 
                   {vibeStreaming ? (
                     <button
@@ -1122,21 +1271,6 @@ export default function VibeCodingStudio({
                 </div>
               </div>
             </div>
-            {vibeMessages.length > 0 && (
-              <div className="flex justify-center pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setVibeMessages([]);
-                    setActionStatuses({});
-                  }}
-                  className="text-[11px] hover:underline cursor-pointer"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  New session
-                </button>
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -1325,42 +1459,13 @@ export default function VibeCodingStudio({
               </div>
 
               {activeTab ? (
-                <div className="flex-1 min-h-0 flex overflow-hidden" style={{ backgroundColor: 'var(--bg-code)' }}>
-                  <div
-                    ref={gutterRef}
-                    className="py-4 px-3 text-right font-mono text-[12px] leading-[1.6] select-none overflow-hidden shrink-0"
-                    style={{ color: '#6E6B62' }}
-                  >
-                    {activeTab.content.split('\n').map((_, idx) => (
-                      <div key={idx}>{idx + 1}</div>
-                    ))}
-                  </div>
-                  <textarea
-                    value={activeTab.content}
-                    onScroll={(e) => {
-                      if (gutterRef.current) gutterRef.current.scrollTop = e.target.scrollTop;
-                    }}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setTabs((prev) => prev.map((t) => (t.path === activeTab.path ? { ...t, content: val } : t)));
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Tab') {
-                        e.preventDefault();
-                        const start = e.target.selectionStart;
-                        const end = e.target.selectionEnd;
-                        const updated = activeTab.content.substring(0, start) + '  ' + activeTab.content.substring(end);
-                        setTabs((prev) => prev.map((t) => (t.path === activeTab.path ? { ...t, content: updated } : t)));
-                        requestAnimationFrame(() => {
-                          e.target.selectionStart = e.target.selectionEnd = start + 2;
-                        });
-                      }
-                    }}
-                    spellCheck={false}
-                    wrap="off"
-                    className="flex-1 p-4 bg-transparent text-[#F2F0E8] font-mono text-[13px] leading-[1.6] resize-none focus:outline-none overflow-auto"
-                  />
-                </div>
+                <CodeEditor
+                  path={activeTab.path}
+                  value={activeTab.content}
+                  onChange={(val) =>
+                    setTabs((prev) => prev.map((t) => (t.path === activeTab.path ? { ...t, content: val } : t)))
+                  }
+                />
               ) : (
                 <div className="flex-1 flex items-center justify-center text-xs" style={{ color: 'var(--text-muted)' }}>
                   Open a file from the Files tab or click one in the transcript.
