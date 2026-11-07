@@ -1,17 +1,7 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
-
-const DEFAULT_USER_NAME = (() => {
-  try {
-    const u = os.userInfo()?.username || 'User';
-    return u.charAt(0).toUpperCase() + u.slice(1);
-  } catch {
-    return 'User';
-  }
-})();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '..', 'data');
@@ -116,9 +106,9 @@ export const DEFAULT_STYLES = [
 const DEFAULT_DB = {
   settings: {
     profile: {
-      fullName: DEFAULT_USER_NAME,
-      nickname: DEFAULT_USER_NAME,
-      workRole: 'Engineering & Product Design',
+      fullName: '',
+      nickname: '',
+      workRole: '',
       personalPreferences: '',
     },
     appearance: {

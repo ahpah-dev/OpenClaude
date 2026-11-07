@@ -48,7 +48,7 @@ export default function MessageItem({
   message,
   isLastAssistant = false,
   isStreaming = false,
-  userInitials = 'D',
+  userInitials = 'U',
   activeArtifactId = null,
   versionedArtifactsMap = new Map(),
   onSelectArtifact,

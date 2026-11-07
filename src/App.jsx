@@ -9,6 +9,7 @@ import ChatsArchiveView from './components/ChatsArchiveView.jsx';
 import ArtifactsGallery from './components/ArtifactsGallery.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import SetupWizardModal from './components/SetupWizardModal.jsx';
+import WelcomeModal from './components/WelcomeModal.jsx';
 import { NineRouterBadgeIcon } from './components/ClaudeIcons.jsx';
 
 import { apiRequest, consumeSSE } from './lib/api.js';
@@ -55,6 +56,8 @@ export default function App() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [settingsModalTab, setSettingsModalTab] = useState(null);
   const [showSetupWizard, setShowSetupWizard] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [greetingSeed, setGreetingSeed] = useState(() => Math.floor(Math.random() * 1000));
   const [dashboardFrameKey, setDashboardFrameKey] = useState(0);
 
   const abortControllerRef = useRef(null);
@@ -97,6 +100,10 @@ export default function App() {
       setActiveStyleId(s.activeStyleId || 'normal');
       setExtendedThinking(!!s.generation?.extendedThinking);
       setArtifactsEnabled(s.generation?.artifactsEnabled !== false);
+      const hasName = !!(s.profile?.nickname?.trim() || s.profile?.fullName?.trim());
+      if (!s.onboardingCompleted || !hasName) {
+        setShowWelcomeModal(true);
+      }
     }
     if (modelsRes.status === 'fulfilled') {
       const m = modelsRes.value;
@@ -167,6 +174,7 @@ export default function App() {
     setActiveConversation(null);
     setActiveArtifact(null);
     setActiveProjectId(null);
+    setGreetingSeed((n) => n + 1);
     setActiveView('home');
   };
 
@@ -424,7 +432,7 @@ export default function App() {
   const userInitials = (
     settings?.profile?.nickname ||
     settings?.profile?.fullName ||
-    'D'
+    'U'
   )
     .trim()
     .slice(0, 2)
@@ -545,12 +553,14 @@ export default function App() {
       <main className="flex-1 min-w-0 h-full flex overflow-hidden">
         {activeView === 'home' && (
           <HomeGreeting
-            userName={settings?.profile?.nickname || settings?.profile?.fullName || 'Friend'}
+            userName={settings?.profile?.nickname || settings?.profile?.fullName || ''}
+            greetingSeed={greetingSeed}
             composerProps={sharedComposerProps}
             systemStatus={systemStatus}
             onOpenNineRouterConnect={() => setSettingsModalTab('9router')}
             onOpenNineRouterDashboard={() => setActiveView('9router-dashboard')}
             onOpenSystemPromptEditor={() => setSettingsModalTab('system-prompt')}
+            onEditUsername={() => setShowWelcomeModal(true)}
           />
         )}
 
@@ -794,6 +804,24 @@ export default function App() {
           onRefresh={refreshSystemAndModels}
           onOpenConnectKey={() => setSettingsModalTab('9router')}
           onViewEmbeddedDashboard={() => setActiveView('9router-dashboard')}
+        />
+      )}
+
+      {/* First-Launch Username & Work Focus Prompt */}
+      {showWelcomeModal && (
+        <WelcomeModal
+          initialName={settings?.profile?.nickname || settings?.profile?.fullName || ''}
+          initialRole={settings?.profile?.workRole || ''}
+          onComplete={async (profileData) => {
+            await handleSaveSettings({
+              profile: {
+                ...(settings?.profile || {}),
+                ...profileData,
+              },
+              onboardingCompleted: true,
+            });
+            setShowWelcomeModal(false);
+          }}
         />
       )}
     </div>

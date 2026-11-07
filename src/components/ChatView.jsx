@@ -17,7 +17,7 @@ export default function ChatView({
   thread = [],
   projects = [],
   isStreaming = false,
-  userInitials = 'D',
+  userInitials = 'U',
   activeArtifact,
   allThreadArtifacts = [],
   versionedArtifactsMap,

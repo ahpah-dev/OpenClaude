@@ -66,7 +66,7 @@ export default function Sidebar({
   const starredProjects = projects.filter((p) => p.starred);
   const recentConversations = conversations.filter((c) => !c.starred).slice(0, 35);
 
-  const initials = (userProfile?.nickname || userProfile?.fullName || 'D')
+  const initials = (userProfile?.nickname || userProfile?.fullName || 'U')
     .trim()
     .slice(0, 2)
     .toUpperCase();
